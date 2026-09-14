@@ -3621,7 +3621,7 @@ function renderMethodPage(){
   const runBtn=el("mthRunBtn");
   if(runBtn) runBtn.disabled=!hasAppliedData();
   el("mthRunHint").textContent=hasAppliedData()
-    ? "Pipeline: (1) satukan indikator → (2) NLP berita → (3) align VAR/regresi."
+    ? "Pipeline backend: (1) indikator → (2) NLP sklearn/HF → (3) align VAR/statsmodels + sklearn."
     : "Unggah dan terapkan indikator di halaman Data terlebih dahulu.";
 }
 function initMethodUI(){
@@ -3841,9 +3841,17 @@ async function uploadIndicators(){
     fd.append("file", INPUT_STATE.file);
     fd.append("replace", el("indReplace").checked?"true":"false");
     const r=await fetch("/api/data/upload-indicators",{method:"POST", body:fd});
-    const j=await r.json();
-    if(!r.ok) throw new Error((typeof j.detail==="string"?j.detail:JSON.stringify(j.detail))||("HTTP "+r.status));
+    const text=await r.text();
+    let j=null;
+    try{ j=JSON.parse(text); }catch(_){
+      throw new Error(r.ok?"Respons server tidak valid":(text.slice(0,160)||("HTTP "+r.status)));
+    }
+    if(!r.ok){
+      const detail=j&&j.detail;
+      throw new Error(typeof detail==="string"?detail:(detail?JSON.stringify(detail):("HTTP "+r.status)));
+    }
     const d=j.data;
+    if(!d) throw new Error("Respons tanpa data");
     el("indStatus").textContent=`Berhasil membaca ${d.filename} · ${d.n_observations} observasi · ${d.indicators.length} indikator · format ${d.format}`;
     renderIndicatorWorkspace(d);
     toast("Pratinjau data siap. Pilih indikator lalu terapkan.");

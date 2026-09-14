@@ -514,12 +514,42 @@ def parse_upload_bytes(filename: str, raw: bytes) -> dict[str, Any]:
 
     if name.endswith(".json"):
         payload = json.loads(raw.decode("utf-8"))
+        # Already-normalized upload payload (from prior save / API)
+        if isinstance(payload, dict) and isinstance(payload.get("observations"), list):
+            obs = payload["observations"]
+            ind_ids = payload.get("indicators") or sorted(
+                {o.get("indicator") for o in obs if o.get("indicator")}
+            )
+            # Rebuild a minimal DataFrame for the standard pipeline
+            rows = []
+            for o in obs:
+                rows.append(
+                    {
+                        "indicator": o.get("indicator"),
+                        "reference_period": o.get("reference_period") or o.get("period"),
+                        "value": o.get("value"),
+                    }
+                )
+            if not rows:
+                raise ValueError("JSON tidak berisi observasi")
+            df = pd.DataFrame(rows)
+            return _df_to_parsed(df, source_name=source)
         if isinstance(payload, list):
             df = pd.DataFrame(payload)
-        elif isinstance(payload, dict) and "data" in payload:
+        elif isinstance(payload, dict) and "data" in payload and isinstance(payload["data"], list):
             df = pd.DataFrame(payload["data"])
+        elif isinstance(payload, dict):
+            # dict-of-lists / wide object — require equal lengths
+            try:
+                df = pd.DataFrame(payload)
+            except ValueError as e:
+                raise ValueError(
+                    "JSON tidak bisa dibaca sebagai tabel. "
+                    "Gunakan array objek, format panjang (indicator/period/value), "
+                    "atau CSV/Excel wide."
+                ) from e
         else:
-            df = pd.DataFrame(payload)
+            raise ValueError("Struktur JSON tidak dikenali")
         return _df_to_parsed(df, source_name=source)
 
     if name.endswith(".parquet"):
@@ -560,21 +590,37 @@ async def upload_indicators(
     except Exception as e:
         raise HTTPException(400, f"Gagal membaca file: {e}") from e
 
-    out_dir = Path(__file__).resolve().parents[2] / "data" / "uploads"
-    out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out_path = out_dir / f"indicators_{stamp}.json"
-    # Don't dump huge observations twice in response-only path; save compact
-    save_payload = {
-        "filename": name,
-        "format": parsed["format"],
-        "indicators": parsed["indicators"],
-        "observations": parsed["observations"],
-        "recommendations": parsed["recommendations"],
-        "default_selected": parsed["default_selected"],
-        "quality": parsed.get("quality"),
-    }
-    out_path.write_text(json.dumps(save_payload), encoding="utf-8")
+    saved_as = f"indicators_{stamp}.json"
+    # Persist best-effort: Vercel/serverless only allows /tmp writes
+    try:
+        candidates = [
+            Path("/tmp") / "npl-uploads",
+            Path(__file__).resolve().parents[2] / "data" / "uploads",
+        ]
+        saved = False
+        save_payload = {
+            "filename": name,
+            "format": parsed["format"],
+            "indicators": parsed["indicators"],
+            "observations": parsed["observations"],
+            "recommendations": parsed["recommendations"],
+            "default_selected": parsed["default_selected"],
+            "quality": parsed.get("quality"),
+        }
+        for out_dir in candidates:
+            try:
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / saved_as
+                out_path.write_text(json.dumps(save_payload), encoding="utf-8")
+                saved = True
+                break
+            except OSError:
+                continue
+        if not saved:
+            saved_as = None  # in-memory only; response still carries observations
+    except Exception:
+        saved_as = None
 
     return {
         "data": {
@@ -592,7 +638,7 @@ async def upload_indicators(
             "default_selected": parsed["default_selected"],
             "observations": parsed["observations"],
             "quality": parsed.get("quality"),
-            "saved_as": out_path.name,
+            "saved_as": saved_as,
             "replace": str(replace).lower() in ("1", "true", "yes"),
         },
         "is_synthetic": False,
