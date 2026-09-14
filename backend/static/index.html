@@ -807,9 +807,27 @@ svg .axis{stroke:var(--rule)}
   border-radius:10px;background:#F8FAFC;font-size:13px;color:var(--ink-2);line-height:1.45;
 }
 .dt-empty-hint.show{display:block}
+.dt-apply-banner{
+  margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 18px;border-radius:12px;border:1px solid #BFDBFE;
+  background:linear-gradient(90deg,#EFF6FF 0%,#F8FBFF 100%);
+}
+.dt-apply-banner .dt-apply-left{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.dt-apply-banner .dt-apply-ico{
+  flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:#2563EB;color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font:700 14px/1 Georgia,serif;
+}
+.dt-apply-banner p{margin:0;font-size:13.5px;color:#1E3A5F;line-height:1.45}
+.dt-apply-banner .note{margin:4px 0 0;font-size:12px;color:#64748B}
+.dt-apply-banner .btn{flex:0 0 auto;background:#2563EB;border-color:#2563EB;color:#fff;white-space:nowrap}
+.dt-apply-banner .btn:disabled{opacity:.55;cursor:not-allowed}
+.dt-quality-card{margin-top:14px}
+.dt-quality-card:empty,.dt-quality-card:not(.has-data){display:none}
 @media(max-width:1100px){
   .dt-layout,.dt-kpis{grid-template-columns:1fr}
   .dt-hero{grid-template-columns:1fr}
+  .dt-apply-banner{flex-direction:column;align-items:stretch}
+  .dt-apply-banner .btn{width:100%}
 }
 </style>
 </head>
@@ -1483,12 +1501,11 @@ svg .axis{stroke:var(--rule)}
     <div class="dt-manage open" id="dtManage">
       <div class="grid g2">
         <div class="panel input-box">
-          <div class="ph"><h4>1. Unggah data indikator</h4><span class="hint">CSV · Excel · PDF · JSON · Parquet</span></div>
+          <div class="ph"><h4>1. Unggah data indikator</h4></div>
           <div class="pb">
             <div class="drop" id="indDrop" tabindex="0" role="button" aria-label="Unggah file indikator">
               <strong>Jatuhkan file di sini</strong>
-              <p>CSV, TSV, Excel (.xlsx/.xls), JSON, Parquet, atau PDF berisi tabel teks.<br>
-              Format lebar: kolom tanggal + indikator. Format panjang: <code>indicator, reference_period, value</code>.</p>
+              <p>CSV, TSV, Excel (.xlsx/.xls), JSON, Parquet, atau PDF berisi tabel teks.</p>
               <input type="file" id="indFile" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.json,.parquet,.pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,application/json">
             </div>
             <div class="grid g2" style="gap:10px">
@@ -1504,7 +1521,7 @@ svg .axis{stroke:var(--rule)}
         </div>
 
         <div class="panel input-box">
-          <div class="ph"><h4>2. Data berita — Google News</h4><span class="hint">RSS publik · Indonesia · pratinjau otomatis</span></div>
+          <div class="ph"><h4>2. Data berita — Google News</h4></div>
           <div class="pb">
             <div class="ctrl">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
@@ -1516,12 +1533,21 @@ svg .axis{stroke:var(--rule)}
               </div>
               <span class="note">Tekan Enter untuk menambah kata kunci. «Hapus semua» mengosongkan pencarian dan mereset daftar berita.</span>
             </div>
-            <div class="grid g2" style="gap:10px">
+            <div class="grid g3" style="gap:10px">
               <div class="ctrl"><label for="gnLang">Bahasa</label>
                 <select id="gnLang"><option value="id" selected>Indonesia</option><option value="en">English</option></select>
               </div>
+              <div class="ctrl"><label for="gnRange">Rentang waktu berita</label>
+                <select id="gnRange">
+                  <option value="1d">24 jam terakhir</option>
+                  <option value="7d" selected>7 hari terakhir</option>
+                  <option value="30d">30 hari terakhir</option>
+                  <option value="90d">90 hari terakhir</option>
+                  <option value="all">Semua waktu</option>
+                </select>
+              </div>
               <div style="display:flex;align-items:flex-end">
-                <button class="btn ghost" type="button" id="gnFetchBtn" style="width:100%">Segarkan berita</button>
+                <button class="btn ghost" type="button" id="gnFetchBtn" style="width:100%">Refresh berita</button>
               </div>
             </div>
             <div class="note" id="gnStatus">Tambah kata kunci untuk mengambil berita dari Google News.</div>
@@ -1534,20 +1560,21 @@ svg .axis{stroke:var(--rule)}
         </div>
       </div>
 
-      <div class="panel" style="margin-top:14px">
-        <div class="ph"><h4>Status sesi input</h4><span class="hint">ringkasan data yang sudah dimasukkan pada sesi ini</span></div>
-        <div class="pb">
-          <div class="grid g3">
-            <div class="tile"><div class="k">Indikator diunggah</div><div class="v num" id="inSessInd">0</div><div class="s" id="inSessIndS">belum ada</div></div>
-            <div class="tile"><div class="k">Observasi baru</div><div class="v num" id="inSessObs">0</div><div class="s">baris nilai</div></div>
-            <div class="tile"><div class="k">Berita Google News</div><div class="v num" id="inSessNews">0</div><div class="s" id="inSessNewsS">belum diambil</div></div>
+      <div class="dt-apply-banner" id="dtApplyBanner">
+        <div class="dt-apply-left">
+          <span class="dt-apply-ico" aria-hidden="true">i</span>
+          <div>
+            <p>Setelah data siap, terapkan ke mesin nowcast lalu lanjut ke halaman Model untuk memilih metode dan parameter.</p>
+            <p class="note" id="indApplyHint">Pilih indikator di atas, lalu terapkan ke mesin nowcast</p>
           </div>
-          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center">
-            <button class="btn" type="button" id="indApplyBtn" disabled>Terapkan &amp; lanjut ke Model</button>
-            <span class="note" id="indApplyHint">Pilih indikator di atas, lalu terapkan ke mesin nowcast</span>
-          </div>
-          <p class="note" style="margin-top:10px;margin-bottom:0">Setelah data diterapkan, lanjut ke tahap <b>Model</b> untuk memilih metode nowcasting lalu menjalankan estimasi.</p>
         </div>
+        <button class="btn" type="button" id="indApplyBtn" disabled>Terapkan &amp; lanjut ke Model →</button>
+      </div>
+      <!-- hooks sesi (disembunyikan; tetap diisi JS) -->
+      <div hidden>
+        <span id="inSessInd">0</span><span id="inSessIndS"></span>
+        <span id="inSessObs">0</span>
+        <span id="inSessNews">0</span><span id="inSessNewsS"></span>
       </div>
     </div>
 
@@ -1645,6 +1672,10 @@ svg .axis{stroke:var(--rule)}
                 <div class="dt-pager" id="dtPager"></div>
               </div>
             </div>
+          </div>
+
+          <div class="dt-card dt-quality-card" id="dtQualityCard">
+            <div id="dtQualityHost"></div>
           </div>
         </div>
 
@@ -3139,7 +3170,7 @@ function resetGoogleNewsSearch(notify){
   if(el("gnMergeBtn")) el("gnMergeBtn").disabled=true;
   if(el("gnMergeHint")) el("gnMergeHint").textContent="";
   const btn=el("gnFetchBtn");
-  if(btn){ btn.disabled=false; btn.textContent="Segarkan berita"; }
+  if(btn){ btn.disabled=false; btn.textContent="Refresh berita"; }
   renderInputSession();
   if(notify) toast("Kata kunci dan daftar berita direset");
 }
@@ -3190,18 +3221,18 @@ function renderQualityPanel(d){
   const series=q.series||d.indicator_meta||[];
   const miss=q.missing_cells!=null?q.missing_cells:series.reduce((a,s)=>a+Math.round((s.missing_pct||0)/100*(q.n_periods||d.n_rows||1)),0);
   const out=q.outlier_count!=null?q.outlier_count:series.reduce((a,s)=>a+(s.outlier_count||0),0);
-  return `<div class="preview-panel" style="margin-bottom:12px">
-    <div class="preview-head"><h5>Kualitas data</h5>
-      <span class="meta">dinilai otomatis saat unggah · ${q.period_start||"—"} → ${q.period_end||"—"}</span>
+  return `<div class="dt-card-head" style="border:0;padding:16px 16px 0">
+      <div><h4>Kualitas data</h4>
+      <p class="desc">dinilai otomatis saat unggah · ${q.period_start||"—"} → ${q.period_end||"—"}</p></div>
     </div>
-    <div class="pb" style="padding-top:10px">
-      <div class="grid g4" style="margin-bottom:10px">
-        <div class="tile"><div class="k">Seri terdeteksi</div><div class="v num">${q.n_series||d.indicators.length}</div><div class="s">indikator</div></div>
+    <div class="dt-card-body">
+      <div class="grid g4" style="margin-bottom:12px">
+        <div class="tile"><div class="k">Seri terdeteksi</div><div class="v num">${q.n_series||(d.indicators||[]).length}</div><div class="s">indikator</div></div>
         <div class="tile"><div class="k">Periode</div><div class="v num">${q.n_periods||d.n_rows||0}</div><div class="s">cakupan waktu</div></div>
         <div class="tile"><div class="k">Nilai hilang</div><div class="v num">${miss}</div><div class="s">sel kosong · rata-rata ${q.avg_missing_pct!=null?q.avg_missing_pct:(series.length?Math.round(series.reduce((a,s)=>a+(s.missing_pct||0),0)/series.length):0)}%</div></div>
         <div class="tile"><div class="k">Outlier</div><div class="v num">${out}</div><div class="s">|z| &gt; 3</div></div>
       </div>
-      <div class="tbl-wrap" style="max-height:180px;overflow:auto"><table>
+      <div class="tbl-wrap" style="max-height:220px;overflow:auto"><table class="dt-table">
         <thead><tr><th>Indikator</th><th class="r">Obs</th><th class="r">Cakupan</th><th class="r">Hilang %</th><th class="r">Outlier</th><th>Status</th></tr></thead>
         <tbody>${series.map(s=>{
           const st=s.status||((s.missing_pct||0)<10?"ok":"warning");
@@ -3210,10 +3241,22 @@ function renderQualityPanel(d){
           return `<tr><td>${esc(s.label||s.id)}</td><td class="r">${s.n_obs||0}</td><td class="r">${s.coverage||0}</td>
             <td class="r">${s.missing_pct!=null?s.missing_pct:"—"}</td><td class="r">${s.outlier_count||0}</td>
             <td><span class="pill" style="background:${col}">${lab}</span></td></tr>`;
-        }).join("")}</tbody>
+        }).join("")||`<tr><td colspan="6"><div class="note" style="text-align:center;padding:12px">Belum ada metrik kualitas.</div></td></tr>`}</tbody>
       </table></div>
-    </div>
-  </div>`;
+    </div>`;
+}
+function renderDataQualityCard(){
+  const card=el("dtQualityCard");
+  const host=el("dtQualityHost");
+  if(!card||!host) return;
+  const d=INPUT_STATE.uploadResult;
+  if(!d){
+    host.innerHTML="";
+    card.classList.remove("has-data");
+    return;
+  }
+  host.innerHTML=renderQualityPanel(d);
+  card.classList.add("has-data");
 }
 function renderIndicatorWorkspace(d){
   INPUT_STATE.uploadResult=d;
@@ -3225,8 +3268,6 @@ function renderIndicatorWorkspace(d){
   const rows=d.preview_rows||[];
   const cols=d.indicators||[];
   const show=rows.slice(0, d.preview_limit||12);
-
-  const quality=renderQualityPanel(d);
 
   const table=`<div class="preview-panel" style="margin-bottom:12px">
     <div class="preview-head">
@@ -3262,7 +3303,7 @@ function renderIndicatorWorkspace(d){
     </div>
   </div>`;
 
-  el("indWorkspace").innerHTML=quality+table+recBox;
+  el("indWorkspace").innerHTML=table+recBox;
   wireIndicatorWorkspace();
   syncApplyButton();
   renderInputSession();
@@ -3576,6 +3617,9 @@ function renderDataPage(){
     renderDataTable();
     renderDataDonuts(all);
     renderDataActivity();
+    renderDataQualityCard();
+  } else {
+    renderDataQualityCard();
   }
 
   const open=DATA_UI.manageOpen && !DATA_UI.userCollapsed;
@@ -3617,6 +3661,8 @@ function initDataPageUI(){
   if(st) st.onchange=()=>{DATA_UI.status=st.value; DATA_UI.page=1; renderDataTable();};
   const q=el("dtSearch");
   if(q) q.oninput=()=>{DATA_UI.q=q.value; DATA_UI.page=1; renderDataTable();};
+  const gnRange=el("gnRange");
+  if(gnRange) gnRange.onchange=()=>{ if(INPUT_STATE.newsTags.length) fetchGoogleNews(true); };
 }
 
 function renderMethodPage(){
@@ -3835,10 +3881,10 @@ async function showIndicatorTemplate(){
     el("indWorkspace").innerHTML=`<div class="preview-panel"><div class="preview-head"><h5>Template unggahan</h5>
       <span class="meta">${esc((d.supported_formats||[]).join(" · "))}</span></div>
       <div style="padding:12px">
-        <div class="note" style="margin-bottom:6px">Format panjang (disarankan)</div>
-        <pre style="font-size:11.5px;white-space:pre-wrap;margin:0 0 12px;background:#F7F8F5;padding:10px;border-radius:3px">${esc(d.long_format_example||"")}</pre>
-        <div class="note" style="margin-bottom:6px">Format lebar</div>
-        <pre style="font-size:11.5px;white-space:pre-wrap;margin:0;background:#F7F8F5;padding:10px;border-radius:3px">${esc(d.wide_format_example||"")}</pre>
+        <div class="note" style="margin-bottom:6px">Contoh kolom tanggal + indikator</div>
+        <pre style="font-size:11.5px;white-space:pre-wrap;margin:0 0 12px;background:#F7F8F5;padding:10px;border-radius:3px">${esc(d.wide_format_example||d.long_format_example||"")}</pre>
+        <div class="note" style="margin-bottom:6px">Contoh baris per indikator</div>
+        <pre style="font-size:11.5px;white-space:pre-wrap;margin:0;background:#F7F8F5;padding:10px;border-radius:3px">${esc(d.long_format_example||"")}</pre>
       </div></div>`;
   }catch(err){
     el("indWorkspace").innerHTML=`<div class="note">Contoh: period,gdp_growth,credit_growth,lending_rate</div>`;
@@ -3908,7 +3954,9 @@ async function fetchGoogleNews(manual){
   INPUT_STATE.newsFetching=true;
   const btn=el("gnFetchBtn");
   if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Mengambil…'; }
-  el("gnStatus").textContent=`Mengambil semua berita untuk ${keywords.length} kata kunci…`;
+  const range=el("gnRange")?el("gnRange").value:"7d";
+  const rangeLabel=el("gnRange")?(el("gnRange").selectedOptions[0]||{}).text||range:range;
+  el("gnStatus").textContent=`Mengambil berita (${rangeLabel}) untuk ${keywords.length} kata kunci…`;
   try{
     const r=await fetch("/api/data/google-news",{
       method:"POST",
@@ -3917,14 +3965,15 @@ async function fetchGoogleNews(manual){
         query,
         keywords,
         language: el("gnLang").value,
-        country: "ID"
+        country: "ID",
+        time_range: range==="all"?"":range
       })
     });
     const j=await r.json();
     if(!r.ok) throw new Error(j.detail||("HTTP "+r.status));
     INPUT_STATE.newsArticles=j.data.articles||[];
     const qn=j.data.queries_run||keywords.length;
-    el("gnStatus").textContent=`${INPUT_STATE.newsArticles.length} artikel unik · ${qn} query · ${j.data.source} · ${new Date(j.data.fetched_at).toLocaleString("id-ID")}`;
+    el("gnStatus").textContent=`${INPUT_STATE.newsArticles.length} artikel unik · ${qn} query · ${rangeLabel} · ${j.data.source} · ${new Date(j.data.fetched_at).toLocaleString("id-ID")}`;
     renderGoogleNewsList();
     el("gnMergeBtn").disabled=!INPUT_STATE.newsArticles.length;
     el("gnMergeHint").textContent=INPUT_STATE.newsArticles.length?"Siap digabung ke korpus sentimen":"";
@@ -3935,7 +3984,7 @@ async function fetchGoogleNews(manual){
     if(manual) toast("Gagal mengambil Google News: "+err.message);
   }finally{
     INPUT_STATE.newsFetching=false;
-    if(btn){ btn.disabled=false; btn.textContent="Segarkan berita"; }
+    if(btn){ btn.disabled=false; btn.textContent="Refresh berita"; }
   }
 }
 function mergeGoogleNews(){

@@ -49,6 +49,8 @@ class GoogleNewsRequest(BaseModel):
     )
     language: str = "id"
     country: str = "ID"
+    # Google News RSS when: operator, e.g. 1d / 7d / 30d / 90d; kosong = tanpa batas waktu
+    time_range: Optional[str] = Field(default="7d", description="Rentang waktu berita (when:Xd).")
     # None / omitted = ambil semua item yang dikembalikan RSS (tanpa batas artifisial)
     max_articles: Optional[int] = Field(default=None, ge=1, le=5000)
 
@@ -125,13 +127,21 @@ async def fetch_google_news(req: GoogleNewsRequest):
     multi-keyword menghilangkan batas artifisial di sisi aplikasi.
     """
     tags = [t.strip() for t in (req.keywords or []) if t and str(t).strip()]
+    when = (req.time_range or "").strip().lower()
+    if when in ("", "all", "semua", "*"):
+        when = ""
+    elif not re.fullmatch(r"\d+[hdwmy]", when):
+        when = "7d"
+
     queries: list[str] = []
     if tags:
         for t in tags:
             # spasi → kutip agar frasa utuh
-            queries.append(f'"{t}"' if (" " in t and not t.startswith('"')) else t)
+            base = f'"{t}"' if (" " in t and not t.startswith('"')) else t
+            queries.append(f"{base} when:{when}" if when else base)
     else:
-        queries = [req.query]
+        base_q = req.query
+        queries = [f"{base_q} when:{when}" if when and "when:" not in base_q else base_q]
 
     seen: set[str] = set()
     articles: list[dict[str, Any]] = []
@@ -159,6 +169,27 @@ async def fetch_google_news(req: GoogleNewsRequest):
     if not articles and errors:
         raise HTTPException(status_code=502, detail="Gagal mengambil Google News: " + "; ".join(errors[:3]))
 
+    # filter sisi server berdasarkan published_at (cadangan bila RSS mengabaikan when:)
+    if when:
+        m = re.fullmatch(r"(\d+)([hdwmy])", when)
+        if m:
+            n, unit = int(m.group(1)), m.group(2)
+            mult = {"h": 3600, "d": 86400, "w": 604800, "m": 2592000, "y": 31536000}[unit]
+            cutoff = datetime.now(timezone.utc).timestamp() - n * mult
+            filtered: list[dict[str, Any]] = []
+            for a in articles:
+                pub = a.get("published_at")
+                if not pub:
+                    filtered.append(a)
+                    continue
+                try:
+                    ts = datetime.fromisoformat(str(pub).replace("Z", "+00:00")).timestamp()
+                    if ts >= cutoff:
+                        filtered.append(a)
+                except Exception:
+                    filtered.append(a)
+            articles = filtered
+
     # terbaru dulu
     def _sort_key(a: dict[str, Any]) -> str:
         return a.get("published_at") or ""
@@ -169,6 +200,7 @@ async def fetch_google_news(req: GoogleNewsRequest):
         "data": {
             "query": " OR ".join(queries) if len(queries) > 1 else queries[0],
             "keywords": tags or None,
+            "time_range": when or "all",
             "count": len(articles),
             "articles": articles,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
