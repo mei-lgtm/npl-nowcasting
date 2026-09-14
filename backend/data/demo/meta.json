@@ -1,0 +1,9 @@
+{
+  "mode": "DEMO / SYNTHETIC DATA",
+  "disclaimer": "All data in this directory is synthetic and fabricated for demonstration. It must NEVER be presented as actual Indonesian official statistics.",
+  "generated_at": "2026-09-14T03:14:03.778097Z",
+  "n_observations": 2078,
+  "n_news": 1800,
+  "npl_actual_through": "2026-06",
+  "current_demo_date": "2026-09-14"
+}
