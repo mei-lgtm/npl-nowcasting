@@ -29,3 +29,5 @@ backend/data/uploads/**
 .vercel/
 *.log
 .DS_Store
+.env*
+.env.local
