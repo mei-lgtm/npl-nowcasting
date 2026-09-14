@@ -789,7 +789,7 @@ svg .axis{stroke:var(--rule)}
 .dt-banner{
   position:relative;border-radius:12px;overflow:hidden;min-height:110px;
   display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 24px;
-  color:#fff;border:1px solid #1E3A5F;
+  color:#fff;border:1px solid #1E3A5F;margin-bottom:14px;
   background:
     linear-gradient(100deg,rgba(15,39,68,.92) 0%,rgba(30,64,110,.75) 55%,rgba(30,64,110,.45) 100%),
     url('https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1200&q=60') center/cover;
@@ -797,9 +797,16 @@ svg .axis{stroke:var(--rule)}
 .dt-banner h4{margin:0 0 4px;font-size:16px;font-weight:600}
 .dt-banner p{margin:0;font-size:12.5px;opacity:.85;max-width:48ch}
 .dt-banner .btn{background:#2563EB;border-color:#2563EB;color:#fff}
-.dt-manage{display:none}
-.dt-manage.open{display:block}
+.dt-manage{display:block;margin-bottom:18px}
+.dt-manage.collapsed{display:none}
 .dt-manage .grid.g2{gap:14px}
+.dt-insights{display:none}
+.dt-insights.show{display:block}
+.dt-empty-hint{
+  display:none;margin:8px 0 18px;padding:14px 16px;border:1px dashed var(--rule-2);
+  border-radius:10px;background:#F8FAFC;font-size:13px;color:var(--ink-2);line-height:1.45;
+}
+.dt-empty-hint.show{display:block}
 @media(max-width:1100px){
   .dt-layout,.dt-kpis{grid-template-columns:1fr}
   .dt-hero{grid-template-columns:1fr}
@@ -1464,188 +1471,196 @@ svg .axis{stroke:var(--rule)}
       </div>
     </div>
 
-    <div class="dt-kpis">
-      <div class="dt-kpi">
-        <div>
-          <div class="k">Total Dataset</div>
-          <div class="v num" id="dtKpiTotal">—</div>
-          <div class="chg up" id="dtKpiTotalChg"></div>
+    <!-- Integrasi Data — selalu di atas saat buka halaman Data -->
+    <div class="dt-banner">
+      <div>
+        <h4>Integrasi Data untuk Insight yang Lebih Dalam</h4>
+        <p>Unggah indikator, sinkronkan Google News, dan terapkan ke mesin nowcasting NPL.</p>
+      </div>
+      <button class="btn" type="button" id="dtManageBtn">Tutup Panel ↑</button>
+    </div>
+
+    <div class="dt-manage open" id="dtManage">
+      <div class="grid g2">
+        <div class="panel input-box">
+          <div class="ph"><h4>1. Unggah data indikator</h4><span class="hint">CSV · Excel · PDF · JSON · Parquet</span></div>
+          <div class="pb">
+            <div class="drop" id="indDrop" tabindex="0" role="button" aria-label="Unggah file indikator">
+              <strong>Jatuhkan file di sini</strong>
+              <p>CSV, TSV, Excel (.xlsx/.xls), JSON, Parquet, atau PDF berisi tabel teks.<br>
+              Format lebar: kolom tanggal + indikator. Format panjang: <code>indicator, reference_period, value</code>.</p>
+              <input type="file" id="indFile" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.json,.parquet,.pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,application/json">
+            </div>
+            <div class="grid g2" style="gap:10px">
+              <label class="note" style="display:flex;gap:7px;align-items:center"><input type="checkbox" id="indReplace"> Timpa indikator demo yang sama</label>
+              <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+                <button class="btn ghost" type="button" id="indTemplateBtn">Lihat template</button>
+                <button class="btn danger ghost" type="button" id="indDeleteBtn" disabled>Hapus</button>
+              </div>
+            </div>
+            <div class="note" id="indStatus">Belum ada file dipilih. File akan diproses otomatis setelah dipilih.</div>
+            <div id="indWorkspace"></div>
+          </div>
         </div>
-        <div>
-          <div class="dt-kpi-ic">Σ</div>
-          <div class="dt-kpi-spark" id="dtSparkTotal"></div>
+
+        <div class="panel input-box">
+          <div class="ph"><h4>2. Data berita — Google News</h4><span class="hint">RSS publik · Indonesia · pratinjau otomatis</span></div>
+          <div class="pb">
+            <div class="ctrl">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+                <label for="gnTagInput" style="margin:0">Kata kunci pencarian</label>
+                <button class="btn danger ghost" type="button" id="gnClearBtn" style="padding:2px 10px;font-size:11px">Hapus semua</button>
+              </div>
+              <div class="tag-box" id="gnTagBox">
+                <input type="text" id="gnTagInput" placeholder="Ketik kata lalu Enter untuk menambah…" autocomplete="off">
+              </div>
+              <span class="note">Tekan Enter untuk menambah kata kunci. «Hapus semua» mengosongkan pencarian dan mereset daftar berita.</span>
+            </div>
+            <div class="grid g2" style="gap:10px">
+              <div class="ctrl"><label for="gnLang">Bahasa</label>
+                <select id="gnLang"><option value="id" selected>Indonesia</option><option value="en">English</option></select>
+              </div>
+              <div style="display:flex;align-items:flex-end">
+                <button class="btn ghost" type="button" id="gnFetchBtn" style="width:100%">Segarkan berita</button>
+              </div>
+            </div>
+            <div class="note" id="gnStatus">Tambah kata kunci untuk mengambil berita dari Google News.</div>
+            <div id="gnList" style="max-height:260px;overflow:auto"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn ghost" type="button" id="gnMergeBtn" disabled>Gabungkan ke korpus berita</button>
+              <span class="note" id="gnMergeHint"></span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="dt-kpi">
-        <div>
-          <div class="k">Data Aktif</div>
-          <div class="v num" id="dtKpiActive">—</div>
-          <div class="sub" id="dtKpiActiveSub"></div>
-        </div>
-        <div>
-          <div class="dt-kpi-ic ok">✓</div>
-          <div class="dt-kpi-spark" id="dtSparkActive"></div>
-        </div>
-      </div>
-      <div class="dt-kpi">
-        <div>
-          <div class="k">Update Terakhir</div>
-          <div class="v sm" id="dtKpiUpdate">—</div>
-          <div class="sub" id="dtKpiUpdateSub"></div>
-        </div>
-        <div>
-          <div class="dt-kpi-ic">⏱</div>
-          <div class="dt-kpi-spark" id="dtSparkUpdate"></div>
-        </div>
-      </div>
-      <div class="dt-kpi">
-        <div>
-          <div class="k">Data Bermasalah</div>
-          <div class="v num" id="dtKpiBad">—</div>
-          <div class="sub" id="dtKpiBadSub"></div>
-        </div>
-        <div>
-          <div class="dt-kpi-ic bad">!</div>
-          <div class="dt-kpi-spark" id="dtSparkBad"></div>
+
+      <div class="panel" style="margin-top:14px">
+        <div class="ph"><h4>Status sesi input</h4><span class="hint">ringkasan data yang sudah dimasukkan pada sesi ini</span></div>
+        <div class="pb">
+          <div class="grid g3">
+            <div class="tile"><div class="k">Indikator diunggah</div><div class="v num" id="inSessInd">0</div><div class="s" id="inSessIndS">belum ada</div></div>
+            <div class="tile"><div class="k">Observasi baru</div><div class="v num" id="inSessObs">0</div><div class="s">baris nilai</div></div>
+            <div class="tile"><div class="k">Berita Google News</div><div class="v num" id="inSessNews">0</div><div class="s" id="inSessNewsS">belum diambil</div></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center">
+            <button class="btn" type="button" id="indApplyBtn" disabled>Terapkan &amp; lanjut ke Model</button>
+            <span class="note" id="indApplyHint">Pilih indikator di atas, lalu terapkan ke mesin nowcast</span>
+          </div>
+          <p class="note" style="margin-top:10px;margin-bottom:0">Setelah data diterapkan, lanjut ke tahap <b>Model</b> untuk memilih metode nowcasting lalu menjalankan estimasi.</p>
         </div>
       </div>
     </div>
 
-    <div class="dt-layout">
-      <div class="dt-main">
-        <div class="dt-card">
-          <div class="dt-card-head">
-            <div>
-              <h4>Sumber Data</h4>
-              <p class="desc">Pantau status, frekuensi, dan kualitas setiap dataset yang masuk ke mesin nowcast.</p>
-            </div>
-            <div class="dt-filters">
-              <select id="dtCatFilter"><option value="">Semua Kategori</option></select>
-              <select id="dtStatusFilter">
-                <option value="">Semua Status</option>
-                <option value="ok">Aktif</option>
-                <option value="warn">Perlu Perhatian</option>
-                <option value="bad">Bermasalah</option>
-              </select>
-              <input type="search" id="dtSearch" placeholder="Cari sumber data…" autocomplete="off">
-            </div>
-          </div>
-          <div class="dt-card-body">
-            <div class="tbl-wrap" style="overflow:auto">
-              <table class="dt-table">
-                <thead>
-                  <tr>
-                    <th>Nama Dataset</th>
-                    <th>Kategori</th>
-                    <th>Sumber</th>
-                    <th>Frekuensi</th>
-                    <th>Periode Terakhir</th>
-                    <th>Status</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="dtTableBody"></tbody>
-              </table>
-            </div>
-            <div class="dt-foot">
-              <p class="note" id="dtPageInfo">Menampilkan 0 dataset</p>
-              <div class="dt-pager" id="dtPager"></div>
-            </div>
-          </div>
-        </div>
+    <div class="dt-empty-hint show" id="dtEmptyHint">
+      Unggah dan terapkan indikator di atas agar ringkasan kualitas, sumber data, dan komposisi kategori muncul di halaman ini.
+    </div>
 
-        <div class="dt-banner">
+    <!-- Ringkasan & monitoring — hanya setelah ada data -->
+    <div class="dt-insights" id="dtInsights">
+      <div class="dt-kpis">
+        <div class="dt-kpi">
           <div>
-            <h4>Integrasi Data untuk Insight yang Lebih Dalam</h4>
-            <p>Unggah indikator, sinkronkan Google News, dan terapkan ke mesin nowcasting NPL.</p>
+            <div class="k">Total Dataset</div>
+            <div class="v num" id="dtKpiTotal">—</div>
+            <div class="chg up" id="dtKpiTotalChg"></div>
           </div>
-          <button class="btn" type="button" id="dtManageBtn">Kelola Data →</button>
+          <div>
+            <div class="dt-kpi-ic">Σ</div>
+            <div class="dt-kpi-spark" id="dtSparkTotal"></div>
+          </div>
         </div>
-
-        <div class="dt-manage" id="dtManage">
-          <div class="grid g2">
-            <div class="panel input-box">
-              <div class="ph"><h4>1. Unggah data indikator</h4><span class="hint">CSV · Excel · PDF · JSON · Parquet</span></div>
-              <div class="pb">
-                <div class="drop" id="indDrop" tabindex="0" role="button" aria-label="Unggah file indikator">
-                  <strong>Jatuhkan file di sini</strong>
-                  <p>CSV, TSV, Excel (.xlsx/.xls), JSON, Parquet, atau PDF berisi tabel teks.<br>
-                  Format lebar: kolom tanggal + indikator. Format panjang: <code>indicator, reference_period, value</code>.</p>
-                  <input type="file" id="indFile" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.json,.parquet,.pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,application/json">
-                </div>
-                <div class="grid g2" style="gap:10px">
-                  <label class="note" style="display:flex;gap:7px;align-items:center"><input type="checkbox" id="indReplace"> Timpa indikator demo yang sama</label>
-                  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-                    <button class="btn ghost" type="button" id="indTemplateBtn">Lihat template</button>
-                    <button class="btn danger ghost" type="button" id="indDeleteBtn" disabled>Hapus</button>
-                  </div>
-                </div>
-                <div class="note" id="indStatus">Belum ada file dipilih. File akan diproses otomatis setelah dipilih.</div>
-                <div id="indWorkspace"></div>
-              </div>
-            </div>
-
-            <div class="panel input-box">
-              <div class="ph"><h4>2. Data berita — Google News</h4><span class="hint">RSS publik · Indonesia · pratinjau otomatis</span></div>
-              <div class="pb">
-                <div class="ctrl">
-                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
-                    <label for="gnTagInput" style="margin:0">Kata kunci pencarian</label>
-                    <button class="btn danger ghost" type="button" id="gnClearBtn" style="padding:2px 10px;font-size:11px">Hapus semua</button>
-                  </div>
-                  <div class="tag-box" id="gnTagBox">
-                    <input type="text" id="gnTagInput" placeholder="Ketik kata lalu Enter untuk menambah…" autocomplete="off">
-                  </div>
-                  <span class="note">Tekan Enter untuk menambah kata kunci. «Hapus semua» mengosongkan pencarian dan mereset daftar berita.</span>
-                </div>
-                <div class="grid g2" style="gap:10px">
-                  <div class="ctrl"><label for="gnLang">Bahasa</label>
-                    <select id="gnLang"><option value="id" selected>Indonesia</option><option value="en">English</option></select>
-                  </div>
-                  <div style="display:flex;align-items:flex-end">
-                    <button class="btn ghost" type="button" id="gnFetchBtn" style="width:100%">Segarkan berita</button>
-                  </div>
-                </div>
-                <div class="note" id="gnStatus">Tambah kata kunci untuk mengambil berita dari Google News.</div>
-                <div id="gnList" style="max-height:260px;overflow:auto"></div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <button class="btn ghost" type="button" id="gnMergeBtn" disabled>Gabungkan ke korpus berita</button>
-                  <span class="note" id="gnMergeHint"></span>
-                </div>
-              </div>
-            </div>
+        <div class="dt-kpi">
+          <div>
+            <div class="k">Data Aktif</div>
+            <div class="v num" id="dtKpiActive">—</div>
+            <div class="sub" id="dtKpiActiveSub"></div>
           </div>
-
-          <div class="panel" style="margin-top:14px">
-            <div class="ph"><h4>Status sesi input</h4><span class="hint">ringkasan data yang sudah dimasukkan pada sesi ini</span></div>
-            <div class="pb">
-              <div class="grid g3">
-                <div class="tile"><div class="k">Indikator diunggah</div><div class="v num" id="inSessInd">0</div><div class="s" id="inSessIndS">belum ada</div></div>
-                <div class="tile"><div class="k">Observasi baru</div><div class="v num" id="inSessObs">0</div><div class="s">baris nilai</div></div>
-                <div class="tile"><div class="k">Berita Google News</div><div class="v num" id="inSessNews">0</div><div class="s" id="inSessNewsS">belum diambil</div></div>
-              </div>
-              <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center">
-                <button class="btn" type="button" id="indApplyBtn" disabled>Terapkan &amp; lanjut ke Model</button>
-                <span class="note" id="indApplyHint">Pilih indikator di atas, lalu terapkan ke mesin nowcast</span>
-              </div>
-              <p class="note" style="margin-top:10px;margin-bottom:0">Setelah data diterapkan, lanjut ke tahap <b>Model</b> untuk memilih metode nowcasting lalu menjalankan estimasi.</p>
-            </div>
+          <div>
+            <div class="dt-kpi-ic ok">✓</div>
+            <div class="dt-kpi-spark" id="dtSparkActive"></div>
+          </div>
+        </div>
+        <div class="dt-kpi">
+          <div>
+            <div class="k">Update Terakhir</div>
+            <div class="v sm" id="dtKpiUpdate">—</div>
+            <div class="sub" id="dtKpiUpdateSub"></div>
+          </div>
+          <div>
+            <div class="dt-kpi-ic">⏱</div>
+            <div class="dt-kpi-spark" id="dtSparkUpdate"></div>
+          </div>
+        </div>
+        <div class="dt-kpi">
+          <div>
+            <div class="k">Data Bermasalah</div>
+            <div class="v num" id="dtKpiBad">—</div>
+            <div class="sub" id="dtKpiBadSub"></div>
+          </div>
+          <div>
+            <div class="dt-kpi-ic bad">!</div>
+            <div class="dt-kpi-spark" id="dtSparkBad"></div>
           </div>
         </div>
       </div>
 
-      <div class="dt-side">
-        <div class="dt-card">
-          <div class="dt-card-head"><h4>Komposisi Data per Kategori</h4></div>
-          <div class="dt-card-body"><div class="dt-donut-wrap" id="dtCatDonut"></div></div>
+      <div class="dt-layout">
+        <div class="dt-main">
+          <div class="dt-card">
+            <div class="dt-card-head">
+              <div>
+                <h4>Sumber Data</h4>
+                <p class="desc">Pantau status, frekuensi, dan kualitas setiap dataset yang masuk ke mesin nowcast.</p>
+              </div>
+              <div class="dt-filters">
+                <select id="dtCatFilter"><option value="">Semua Kategori</option></select>
+                <select id="dtStatusFilter">
+                  <option value="">Semua Status</option>
+                  <option value="ok">Aktif</option>
+                  <option value="warn">Perlu Perhatian</option>
+                  <option value="bad">Bermasalah</option>
+                </select>
+                <input type="search" id="dtSearch" placeholder="Cari sumber data…" autocomplete="off">
+              </div>
+            </div>
+            <div class="dt-card-body">
+              <div class="tbl-wrap" style="overflow:auto">
+                <table class="dt-table">
+                  <thead>
+                    <tr>
+                      <th>Nama Dataset</th>
+                      <th>Kategori</th>
+                      <th>Sumber</th>
+                      <th>Frekuensi</th>
+                      <th>Periode Terakhir</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="dtTableBody"></tbody>
+                </table>
+              </div>
+              <div class="dt-foot">
+                <p class="note" id="dtPageInfo">Menampilkan 0 dataset</p>
+                <div class="dt-pager" id="dtPager"></div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="dt-card">
-          <div class="dt-card-head"><h4>Status Kualitas Data</h4></div>
-          <div class="dt-card-body"><div class="dt-donut-wrap" id="dtQualDonut"></div></div>
-        </div>
-        <div class="dt-card">
-          <div class="dt-card-head"><h4>Aktivitas Terbaru</h4></div>
-          <div class="dt-card-body"><ul class="dt-act" id="dtActivity"></ul></div>
+
+        <div class="dt-side">
+          <div class="dt-card">
+            <div class="dt-card-head"><h4>Komposisi Data per Kategori</h4></div>
+            <div class="dt-card-body"><div class="dt-donut-wrap" id="dtCatDonut"></div></div>
+          </div>
+          <div class="dt-card">
+            <div class="dt-card-head"><h4>Status Kualitas Data</h4></div>
+            <div class="dt-card-body"><div class="dt-donut-wrap" id="dtQualDonut"></div></div>
+          </div>
+          <div class="dt-card">
+            <div class="dt-card-head"><h4>Aktivitas Terbaru</h4></div>
+            <div class="dt-card-body"><ul class="dt-act" id="dtActivity"></ul></div>
+          </div>
         </div>
       </div>
     </div>
@@ -3316,7 +3331,7 @@ function renderInputPage(){ renderInputSession(); renderDataPage(); }
 /* ============================================================
    DATA PAGE (katalog sumber + kualitas)
    ============================================================ */
-const DATA_UI={page:1,pageSize:10,cat:"",status:"",q:"",manageOpen:false,userCollapsed:false,catsFilled:false};
+const DATA_UI={page:1,pageSize:10,cat:"",status:"",q:"",manageOpen:true,userCollapsed:false,catsFilled:false};
 const DT_CAT_COLORS=["#2563EB","#0EA5E9","#059669","#D97706","#7C3AED","#DC2626","#64748B","#0891B2"];
 function dtFreqLabel(f){
   if(f==="monthly"||f==="Bulanan") return "Bulanan";
@@ -3484,9 +3499,11 @@ function renderDataTable(){
   body.querySelectorAll("[data-dt-act]").forEach(btn=>{
     btn.onclick=()=>{
       DATA_UI.manageOpen=true;
-      const box=el("dtManage"); if(box) box.classList.add("open");
+      DATA_UI.userCollapsed=false;
+      const box=el("dtManage");
+      if(box){ box.classList.add("open"); box.classList.remove("collapsed"); }
       const mbtn=el("dtManageBtn"); if(mbtn) mbtn.textContent="Tutup Panel ↑";
-      toast("Buka panel Kelola Data untuk unggah / perbarui «"+btn.dataset.dtAct+"»");
+      toast("Buka panel Integrasi Data untuk unggah / perbarui «"+btn.dataset.dtAct+"»");
       box&&box.scrollIntoView({behavior:"smooth",block:"start"});
     };
   });
@@ -3541,35 +3558,54 @@ function fillDataCatFilter(all){
   sel.value=cur;
   DATA_UI.catsFilled=true;
 }
+function hasDataInsights(){
+  return !!(INPUT_STATE.uploadResult || hasAppliedData());
+}
 function renderDataPage(){
-  if(!el("dtTableBody")) return;
-  const all=buildDataCatalog();
-  fillDataCatFilter(all);
-  renderDataKpis(all);
-  renderDataTable();
-  renderDataDonuts(all);
-  renderDataActivity();
-  const hasWork=!!(INPUT_STATE.uploadResult||INPUT_STATE.file);
-  const open=DATA_UI.manageOpen || (hasWork && !DATA_UI.userCollapsed);
-  if(el("dtManage")) el("dtManage").classList.toggle("open", open);
+  if(!el("dtManage") && !el("dtTableBody")) return;
+  const showInsights=hasDataInsights();
+  const insights=el("dtInsights");
+  const hint=el("dtEmptyHint");
+  if(insights) insights.classList.toggle("show", showInsights);
+  if(hint) hint.classList.toggle("show", !showInsights);
+
+  if(showInsights && el("dtTableBody")){
+    const all=buildDataCatalog();
+    fillDataCatFilter(all);
+    renderDataKpis(all);
+    renderDataTable();
+    renderDataDonuts(all);
+    renderDataActivity();
+  }
+
+  const open=DATA_UI.manageOpen && !DATA_UI.userCollapsed;
+  const box=el("dtManage");
+  if(box){
+    box.classList.toggle("open", open);
+    box.classList.toggle("collapsed", !open);
+  }
   const mbtn=el("dtManageBtn");
-  if(mbtn) mbtn.textContent=open?"Tutup Panel ↑":"Kelola Data →";
+  if(mbtn) mbtn.textContent=open?"Tutup Panel ↑":"Buka Integrasi Data →";
+  if(el("dtLastHero") && !showInsights){
+    el("dtLastHero").textContent="—";
+  }
 }
 function initDataPageUI(){
   const btn=el("dtManageBtn");
   if(btn) btn.onclick=()=>{
     const box=el("dtManage");
-    const currentlyOpen=box && box.classList.contains("open");
+    const currentlyOpen=box && !box.classList.contains("collapsed");
     if(currentlyOpen){
       DATA_UI.manageOpen=false;
       DATA_UI.userCollapsed=true;
-      if(box) box.classList.remove("open");
-      btn.textContent="Kelola Data →";
+      if(box){ box.classList.remove("open"); box.classList.add("collapsed"); }
+      btn.textContent="Buka Integrasi Data →";
     } else {
       DATA_UI.manageOpen=true;
       DATA_UI.userCollapsed=false;
       if(box){
         box.classList.add("open");
+        box.classList.remove("collapsed");
         box.scrollIntoView({behavior:"smooth",block:"start"});
       }
       btn.textContent="Tutup Panel ↑";
