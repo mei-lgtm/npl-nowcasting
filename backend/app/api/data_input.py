@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import json
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from calendar import monthrange
+from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 from urllib.parse import quote_plus
 
 import httpx
@@ -50,13 +52,49 @@ class GoogleNewsRequest(BaseModel):
     language: str = "id"
     country: str = "ID"
     # Google News RSS when: operator, e.g. 1d / 7d / 30d / 90d; kosong = tanpa batas waktu
-    time_range: Optional[str] = Field(default="7d", description="Rentang waktu berita (when:Xd).")
+    time_range: Optional[str] = Field(default="90d", description="Rentang waktu berita (when:Xd).")
+    # Rentang kalender kustom (YYYY-MM-DD); jika diisi, mengabaikan time_range preset
+    date_from: Optional[str] = Field(default=None, description="Tanggal mulai (YYYY-MM-DD).")
+    date_to: Optional[str] = Field(default=None, description="Tanggal akhir (YYYY-MM-DD).")
     # None / omitted = ambil semua item yang dikembalikan RSS (tanpa batas artifisial)
-    max_articles: Optional[int] = Field(default=None, ge=1, le=5000)
+    max_articles: Optional[int] = Field(default=None, ge=1, le=8000)
+    # auto: single-shot bila rentang pendek; monthly windows bila rentang panjang
+    strategy: Optional[str] = Field(
+        default="auto",
+        description="auto | single | monthly — monthly memecah rentang per bulan (rekomendasi untuk multi-tahun).",
+    )
 
 
 def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text or "").strip()
+
+
+def _parse_ymd(val: Optional[str]) -> Optional[date]:
+    if not val:
+        return None
+    try:
+        return datetime.strptime(val.strip()[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def _month_windows(lo: date, hi: date) -> List[Tuple[date, date]]:
+    """Pecah [lo, hi] menjadi jendela bulanan agar RSS Google tidak terjebak ~100 item total."""
+    if hi < lo:
+        lo, hi = hi, lo
+    windows: List[Tuple[date, date]] = []
+    cur = date(lo.year, lo.month, 1)
+    while cur <= hi:
+        last = monthrange(cur.year, cur.month)[1]
+        w_lo = max(cur, lo)
+        w_hi = min(date(cur.year, cur.month, last), hi)
+        if w_lo <= w_hi:
+            windows.append((w_lo, w_hi))
+        if cur.month == 12:
+            cur = date(cur.year + 1, 1, 1)
+        else:
+            cur = date(cur.year, cur.month + 1, 1)
+    return windows
 
 
 def _parse_rss(xml_text: str, max_articles: Optional[int] = None) -> List[dict]:
@@ -67,7 +105,16 @@ def _parse_rss(xml_text: str, max_articles: Optional[int] = None) -> List[dict]:
         link = (item.findtext("link") or "").strip()
         source = (item.findtext("source") or "").strip()
         pub = item.findtext("pubDate") or ""
-        desc = _strip_html(item.findtext("description") or "")
+        desc_raw = item.findtext("description") or ""
+        desc = _strip_html(desc_raw)
+        image = None
+        m_img = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', desc_raw, re.I)
+        if m_img:
+            image = m_img.group(1)
+        else:
+            media = item.find("{http://search.yahoo.com/mrss/}content")
+            if media is not None and media.get("url"):
+                image = media.get("url")
         published_at = None
         if pub:
             try:
@@ -83,6 +130,7 @@ def _parse_rss(xml_text: str, max_articles: Optional[int] = None) -> List[dict]:
                 "source": source or "Google News",
                 "published_at": published_at,
                 "snippet": desc[:400] if desc else None,
+                "image": image,
                 "provider": "google_news",
             }
         )
@@ -118,98 +166,350 @@ async def _fetch_one_query(
     return _parse_rss(resp.text, max_articles)
 
 
+def _base_keyword_queries(tags: List[str], default_query: str) -> List[str]:
+    GENERAL_QUERIES = [
+        "Indonesia ekonomi",
+        "Indonesia perbankan",
+        "kredit bank Indonesia",
+        "Bank Indonesia",
+        "inflasi Indonesia",
+        "suku bunga Indonesia",
+        "NPL bank",
+        "rupiah pasar keuangan",
+    ]
+    bases: list[str] = []
+    if tags:
+        for t in tags:
+            base = f'"{t}"' if (" " in t and not t.startswith('"')) else t
+            bases.append(base)
+    else:
+        bases.extend(GENERAL_QUERIES)
+        dq = (default_query or "").strip()
+        if dq and dq not in bases and "when:" not in dq and "after:" not in dq:
+            bases.insert(0, dq)
+    # unik jaga urutan
+    seen: set[str] = set()
+    out: list[str] = []
+    for b in bases:
+        if b in seen:
+            continue
+        seen.add(b)
+        out.append(b)
+    return out
+
+
+def _article_month_key(a: dict) -> Optional[str]:
+    pub = a.get("published_at")
+    if not pub:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(pub).replace("Z", "+00:00"))
+        return f"{dt.year:04d}-{dt.month:02d}"
+    except Exception:
+        s = str(pub)
+        m = re.match(r"^(\d{4})-(\d{2})", s)
+        return f"{m.group(1)}-{m.group(2)}" if m else None
+
+
+def _balance_across_months(articles: List[dict], hard_cap: int) -> Tuple[List[dict], dict[str, int]]:
+    """Ambil sampel merata antar bulan agar tiap periode terwakili sebelum mengisi sisa kuota."""
+    if hard_cap <= 0 or len(articles) <= hard_cap:
+        cov: dict[str, int] = {}
+        for a in articles:
+            mk = _article_month_key(a) or "unknown"
+            cov[mk] = cov.get(mk, 0) + 1
+        return articles, dict(sorted(cov.items()))
+
+    buckets: dict[str, list] = {}
+    for a in articles:
+        mk = _article_month_key(a) or "unknown"
+        buckets.setdefault(mk, []).append(a)
+    for mk in buckets:
+        buckets[mk].sort(key=lambda x: x.get("published_at") or "", reverse=True)
+
+    months = sorted(k for k in buckets.keys() if k != "unknown")
+    if "unknown" in buckets:
+        months.append("unknown")
+    if not months:
+        return articles[:hard_cap], {}
+
+    # Fase 1: jatah minimal merata
+    base = max(1, hard_cap // len(months))
+    picked: list[dict] = []
+    used: dict[str, int] = {m: 0 for m in months}
+    for m in months:
+        take = min(base, len(buckets[m]), hard_cap - len(picked))
+        if take <= 0:
+            break
+        picked.extend(buckets[m][:take])
+        used[m] = take
+
+    # Fase 2: round-robin sisa kuota dari bulan yang masih punya artikel
+    if len(picked) < hard_cap:
+        progressed = True
+        while len(picked) < hard_cap and progressed:
+            progressed = False
+            for m in months:
+                if len(picked) >= hard_cap:
+                    break
+                idx = used[m]
+                if idx < len(buckets[m]):
+                    picked.append(buckets[m][idx])
+                    used[m] = idx + 1
+                    progressed = True
+
+    picked.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+    coverage = {m: used[m] for m in months if used[m] > 0}
+    return picked, dict(sorted(coverage.items()))
+
+
 @router.post("/google-news")
 async def fetch_google_news(req: GoogleNewsRequest):
-    """Ambil sebanyak mungkin artikel dari Google News RSS.
+    """Ambil berita Google News RSS dengan strategi terbaik untuk rentang panjang.
 
-    Setiap kata kunci diambil terpisah (bukan digabung OR) agar cakupan lebih lengkap,
-    lalu digabung dan deduplikasi. Google News RSS biasanya ~100 item per query;
-    multi-keyword menghilangkan batas artifisial di sisi aplikasi.
+    Google News RSS ≈100 item/query tanpa pagination. Untuk rentang multi-bulan/tahun,
+    rentang dipecah per bulan × kata kunci, dengan kuota per bulan agar hasil tersebar
+    merata di seluruh periode (bukan hanya menumpuk di bulan terbaru).
     """
     tags = [t.strip() for t in (req.keywords or []) if t and str(t).strip()]
+    date_from = (req.date_from or "").strip() or None
+    date_to = (req.date_to or "").strip() or None
     when = (req.time_range or "").strip().lower()
-    if when in ("", "all", "semua", "*"):
+    if date_from or date_to:
+        when = ""
+    elif when in ("", "all", "semua", "*"):
         when = ""
     elif not re.fullmatch(r"\d+[hdwmy]", when):
         when = "7d"
 
-    queries: list[str] = []
-    if tags:
-        for t in tags:
-            # spasi → kutip agar frasa utuh
-            base = f'"{t}"' if (" " in t and not t.startswith('"')) else t
-            queries.append(f"{base} when:{when}" if when else base)
-    else:
-        base_q = req.query
-        queries = [f"{base_q} when:{when}" if when and "when:" not in base_q else base_q]
+    lo = _parse_ymd(date_from)
+    hi = _parse_ymd(date_to) or datetime.now(timezone.utc).date()
+    if lo and not date_to:
+        hi = datetime.now(timezone.utc).date()
+    if hi and not lo:
+        lo = hi - timedelta(days=89)
 
-    seen: set[str] = set()
-    articles: list[dict[str, Any]] = []
+    span_days = (hi - lo).days + 1 if (lo and hi) else None
+    strategy = (req.strategy or "auto").strip().lower()
+    if strategy not in ("auto", "single", "monthly"):
+        strategy = "auto"
+    use_monthly = strategy == "monthly" or (
+        strategy == "auto" and span_days is not None and span_days > 45 and bool(lo and hi)
+    )
+
+    bases = _base_keyword_queries(tags, req.query)
+    hard_cap = req.max_articles or (5000 if use_monthly else 800)
+
+    def _decorate(base: str, w_lo: Optional[date], w_hi: Optional[date], when_op: str) -> str:
+        q = base
+        if when_op:
+            q = f"{q} when:{when_op}"
+        if w_lo:
+            q = f"{q} after:{w_lo.isoformat()}"
+        if w_hi:
+            before = (w_hi + timedelta(days=1)).isoformat()
+            q = f"{q} before:{before}"
+        return q
+
+    def _parse_ts(pub: str):
+        try:
+            return datetime.fromisoformat(str(pub).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            return None
+
+    def _in_range(a: dict, w_lo: Optional[date], w_hi: Optional[date]) -> bool:
+        if not (w_lo or w_hi):
+            return True
+        pub = a.get("published_at")
+        if not pub:
+            return False
+        ts = _parse_ts(pub)
+        if ts is None:
+            return False
+        if w_lo is not None:
+            lo_ts = datetime(w_lo.year, w_lo.month, w_lo.day, tzinfo=timezone.utc).timestamp()
+            if ts < lo_ts:
+                return False
+        if w_hi is not None:
+            hi_ts = datetime(w_hi.year, w_hi.month, w_hi.day, 23, 59, 59, tzinfo=timezone.utc).timestamp()
+            if ts > hi_ts:
+                return False
+        return True
+
     errors: list[str] = []
+    queries_run = 0
+    windows_meta: list[dict[str, Any]] = []
+    sem = asyncio.Semaphore(4)
+
+    async def _run_job(client: httpx.AsyncClient, q: str) -> Tuple[str, List[dict], Optional[str]]:
+        async with sem:
+            try:
+                batch = await _fetch_one_query(client, q, req.language, req.country, None)
+                return q, batch, None
+            except httpx.HTTPError as e:
+                return q, [], str(e)
+
+    pool: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    used_strategy = "single"
 
     try:
-        async with httpx.AsyncClient(timeout=40.0, follow_redirects=True) as client:
-            for q in queries:
-                try:
-                    batch = await _fetch_one_query(
-                        client, q, req.language, req.country, req.max_articles
-                    )
-                    for a in batch:
+        timeout = httpx.Timeout(45.0, connect=15.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            if use_monthly and lo and hi:
+                used_strategy = "monthly_balanced"
+                windows = _month_windows(lo, hi)
+                n_win = max(1, len(windows))
+                # Kuota target per bulan + buffer fetch agar ada pilihan saat balancing
+                month_quota = max(20, hard_cap // n_win)
+                month_fetch_cap = max(month_quota * 2, month_quota + 15)
+
+                for w_lo, w_hi in windows:
+                    month_jobs = [_decorate(base, w_lo, w_hi, "") for base in bases]
+                    queries_run += len(month_jobs)
+                    month_arts: list[dict] = []
+                    month_seen: set[str] = set()
+                    # fetch semua keyword bulan ini
+                    for i in range(0, len(month_jobs), 8):
+                        part = month_jobs[i : i + 8]
+                        results = await asyncio.gather(*[_run_job(client, q) for q in part])
+                        for q, batch, err in results:
+                            if err:
+                                errors.append(f"{q[:80]}: {err}")
+                            for a in batch:
+                                if not _in_range(a, w_lo, w_hi):
+                                    continue
+                                k = _article_key(a)
+                                if k in month_seen or k in seen:
+                                    continue
+                                month_seen.add(k)
+                                month_arts.append({**a, "matched_query": q, "window": f"{w_lo.isoformat()}:{w_hi.isoformat()}"})
+                        if len(month_arts) >= month_fetch_cap:
+                            break
+                    # simpan hingga fetch_cap; balancing global nanti
+                    month_arts.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+                    kept = month_arts[:month_fetch_cap]
+                    for a in kept:
                         k = _article_key(a)
                         if k in seen:
                             continue
                         seen.add(k)
-                        a = {**a, "matched_query": q}
-                        articles.append(a)
-                except httpx.HTTPError as e:
-                    errors.append(f"{q}: {e}")
+                        pool.append(a)
+                    windows_meta.append(
+                        {
+                            "from": w_lo.isoformat(),
+                            "to": w_hi.isoformat(),
+                            "fetched": len(month_arts),
+                            "kept": len(kept),
+                            "quota_target": month_quota,
+                        }
+                    )
+                    await asyncio.sleep(0.08)
+            else:
+                used_strategy = "single"
+                jobs = [
+                    _decorate(
+                        base,
+                        lo if (date_from or date_to) else None,
+                        hi if (date_from or date_to) else None,
+                        when,
+                    )
+                    for base in bases
+                ]
+                queries_run = len(jobs)
+                if lo and hi:
+                    windows_meta = [{"from": lo.isoformat(), "to": hi.isoformat()}]
+                for i in range(0, len(jobs), 24):
+                    part = jobs[i : i + 24]
+                    results = await asyncio.gather(*[_run_job(client, q) for q in part])
+                    for q, batch, err in results:
+                        if err:
+                            errors.append(f"{q[:80]}: {err}")
+                        for a in batch:
+                            k = _article_key(a)
+                            if k in seen:
+                                continue
+                            if (date_from or date_to) and not _in_range(a, lo, hi):
+                                continue
+                            seen.add(k)
+                            pool.append({**a, "matched_query": q})
+                    if len(pool) >= hard_cap * 2:
+                        break
+                    if i + 24 < len(jobs):
+                        await asyncio.sleep(0.15)
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Gagal mengambil Google News: {e}") from e
 
-    if not articles and errors:
+    if not pool and errors:
         raise HTTPException(status_code=502, detail="Gagal mengambil Google News: " + "; ".join(errors[:3]))
 
-    # filter sisi server berdasarkan published_at (cadangan bila RSS mengabaikan when:)
-    if when:
+    # Filter global + when: untuk mode single
+    articles = pool
+    if used_strategy == "single" and when and not (date_from or date_to):
         m = re.fullmatch(r"(\d+)([hdwmy])", when)
         if m:
             n, unit = int(m.group(1)), m.group(2)
             mult = {"h": 3600, "d": 86400, "w": 604800, "m": 2592000, "y": 31536000}[unit]
             cutoff = datetime.now(timezone.utc).timestamp() - n * mult
-            filtered: list[dict[str, Any]] = []
+            filtered = []
             for a in articles:
                 pub = a.get("published_at")
                 if not pub:
                     filtered.append(a)
                     continue
-                try:
-                    ts = datetime.fromisoformat(str(pub).replace("Z", "+00:00")).timestamp()
-                    if ts >= cutoff:
-                        filtered.append(a)
-                except Exception:
+                ts = _parse_ts(pub)
+                if ts is None or ts >= cutoff:
                     filtered.append(a)
             articles = filtered
 
-    # terbaru dulu
-    def _sort_key(a: dict[str, Any]) -> str:
-        return a.get("published_at") or ""
+    if used_strategy.startswith("monthly"):
+        articles, coverage = _balance_across_months(articles, hard_cap)
+    else:
+        articles.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+        articles = articles[:hard_cap]
+        coverage = {}
+        for a in articles:
+            mk = _article_month_key(a) or "unknown"
+            coverage[mk] = coverage.get(mk, 0) + 1
+        coverage = dict(sorted(coverage.items()))
 
-    articles.sort(key=_sort_key, reverse=True)
+    months_with = len([k for k, v in coverage.items() if k != "unknown" and v > 0])
+    months_empty = 0
+    if used_strategy.startswith("monthly") and windows_meta:
+        months_empty = sum(1 for w in windows_meta if int(w.get("kept") or 0) == 0)
+
+    range_label = (
+        f"{(lo.isoformat() if lo else date_from) or '…'} → {(hi.isoformat() if hi else date_to) or '…'}"
+        if (date_from or date_to or lo)
+        else (when or "all")
+    )
 
     return {
         "data": {
-            "query": " OR ".join(queries) if len(queries) > 1 else queries[0],
+            "query": " | ".join(bases[:8]) + ("…" if len(bases) > 8 else ""),
             "keywords": tags or None,
-            "time_range": when or "all",
+            "time_range": range_label,
             "count": len(articles),
             "articles": articles,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "source": "Google News RSS",
-            "queries_run": len(queries),
-            "partial_errors": errors or None,
+            "strategy": used_strategy,
+            "windows": len(windows_meta),
+            "window_span_days": span_days,
+            "queries_run": queries_run,
+            "period_coverage": coverage,
+            "months_covered": months_with,
+            "months_empty": months_empty or None,
+            "partial_errors": errors[:12] or None,
+            "error_count": len(errors) or None,
+            "capped_at": hard_cap if len(articles) >= hard_cap else None,
         },
         "is_synthetic": False,
-        "message": f"Berita diambil dari Google News RSS ({len(queries)} query, {len(articles)} unik).",
+        "message": (
+            f"Berita diambil via Google News RSS · strategi {used_strategy}"
+            f" ({queries_run} query, {len(windows_meta)} jendela, {len(articles)} unik,"
+            f" {months_with} bulan terisi)."
+        ),
     }
 
 

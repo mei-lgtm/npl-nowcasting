@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     data_dir: str = "data/demo"
     openai_api_key: Optional[str] = None
     news_api_key: Optional[str] = None
+    # Qwen / DashScope (OpenAI-compatible chat completions)
+    qwen_api_key: Optional[str] = None
+    qwen_model: str = "qwen-plus"
+    qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
     default_target: str = "gross_npl_ratio"
     random_seed: int = 42
 

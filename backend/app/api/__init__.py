@@ -10,9 +10,11 @@ from app.data.schemas.models import ScenarioInput, WorkflowConfig
 from app.engines.sentiment.engine import SentimentEngine
 from app.services.nowcasting_service import get_service
 from app.api.data_input import router as data_input_router
+from app.api.ask_ai import router as ask_ai_router
 
 router = APIRouter()
 router.include_router(data_input_router)
+router.include_router(ask_ai_router)
 
 
 class SentimentRequest(BaseModel):

@@ -31,3 +31,11 @@ backend/data/uploads/**
 .DS_Store
 .env*
 .env.local
+!.env.example
+!backend/.env.example
+
+# Demo recordings / local artifacts
+demo/
+SINAR-demo.mp4
+**/__pycache__/
+backend/.venv/
