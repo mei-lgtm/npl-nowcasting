@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List, Optional
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env",
+        env_prefix="NPL_",
+        extra="ignore",
+    )
+
     app_mode: str = "demo"  # demo | production
-    cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origins: List[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "https://npl-nowcasting.vercel.app",
+    ]
     database_url: str = "sqlite:///./npl.db"
     data_dir: str = "data/demo"
     openai_api_key: Optional[str] = None
@@ -18,10 +32,6 @@ class Settings(BaseSettings):
     qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
     default_target: str = "gross_npl_ratio"
     random_seed: int = 42
-
-    class Config:
-        env_file = ".env"
-        env_prefix = "NPL_"
 
 
 settings = Settings()

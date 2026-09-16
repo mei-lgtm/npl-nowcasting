@@ -1165,11 +1165,34 @@ svg .axis{stroke:var(--rule)}
 }
 .ask-ai-head .ttl{font-size:13.5px; font-weight:700}
 .ask-ai-head .sub{font-size:11px; opacity:.8; margin-top:2px}
-.ask-ai-head .ask-ai-close{
+.ask-ai-head-actions{display:flex; align-items:center; gap:6px}
+.ask-ai-head .ask-ai-close,
+.ask-ai-head .ask-ai-gear{
   border:0; background:rgba(255,255,255,.12); color:#fff; width:28px; height:28px;
-  border-radius:8px; cursor:pointer; font-size:16px; line-height:1;
+  border-radius:8px; cursor:pointer; font-size:14px; line-height:1;
+  display:inline-flex; align-items:center; justify-content:center;
 }
-.ask-ai-head .ask-ai-close:hover{background:rgba(255,255,255,.22)}
+.ask-ai-head .ask-ai-close:hover,
+.ask-ai-head .ask-ai-gear:hover{background:rgba(255,255,255,.22)}
+.ask-ai-head .ask-ai-close{font-size:16px}
+.ask-ai-settings{
+  padding:10px 12px; border-bottom:1px solid var(--rule-2); background:#FFF;
+  display:flex; flex-direction:column; gap:8px;
+}
+.ask-ai-settings[hidden]{display:none!important}
+.ask-ai-settings label{font-size:11px; color:var(--ink-3); display:block; margin-bottom:3px}
+.ask-ai-settings input, .ask-ai-settings select{
+  width:100%; padding:8px 10px; border:1px solid var(--rule-2); border-radius:8px;
+  font:inherit; font-size:12px; color:var(--ink); background:#fff; box-sizing:border-box;
+}
+.ask-ai-settings .row{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.ask-ai-settings .actions{display:flex; gap:8px; flex-wrap:wrap}
+.ask-ai-settings .actions button{
+  border:1px solid var(--rule-2); border-radius:8px; padding:7px 12px; background:#F8FAFC;
+  font:600 12px/1 Inter,system-ui,sans-serif; cursor:pointer; color:var(--ink);
+}
+.ask-ai-settings .actions button.primary{background:#2563EB; border-color:#2563EB; color:#fff}
+.ask-ai-settings .hint{font-size:11px; color:var(--ink-3); line-height:1.4; margin:0}
 .ask-ai-status{
   padding:6px 12px; font-size:11px; color:var(--ink-3); background:#F8FAFC; border-bottom:1px solid var(--rule-2);
 }
@@ -2189,9 +2212,41 @@ svg .axis{stroke:var(--rule)}
       <div class="ttl">Ask AI</div>
       <div class="sub">Dibantu Qwen · konteks SINAR</div>
     </div>
-    <button type="button" class="ask-ai-close" id="askAiClose" aria-label="Tutup">×</button>
+    <div class="ask-ai-head-actions">
+      <button type="button" class="ask-ai-gear" id="askAiGear" title="Pengaturan Qwen" aria-label="Pengaturan">⚙</button>
+      <button type="button" class="ask-ai-close" id="askAiClose" aria-label="Tutup">×</button>
+    </div>
   </div>
   <div class="ask-ai-status" id="askAiStatus"><span class="dot"></span>Memeriksa koneksi Qwen…</div>
+  <div class="ask-ai-settings" id="askAiSettings" hidden>
+    <div>
+      <label for="askAiKey">DashScope / Qwen API Key</label>
+      <input type="password" id="askAiKey" placeholder="sk-..." autocomplete="off">
+    </div>
+    <div class="row">
+      <div>
+        <label for="askAiModel">Model</label>
+        <select id="askAiModel">
+          <option value="qwen-plus">qwen-plus</option>
+          <option value="qwen-turbo">qwen-turbo</option>
+          <option value="qwen-max">qwen-max</option>
+          <option value="qwen2.5-72b-instruct">qwen2.5-72b-instruct</option>
+        </select>
+      </div>
+      <div>
+        <label for="askAiBase">Region</label>
+        <select id="askAiBase">
+          <option value="https://dashscope-intl.aliyuncs.com/compatible-mode/v1">International</option>
+          <option value="https://dashscope.aliyuncs.com/compatible-mode/v1">China</option>
+        </select>
+      </div>
+    </div>
+    <p class="hint">Dapatkan key di dashscope.console.aliyun.com · disimpan lokal di browser Anda (tidak di-commit ke Git).</p>
+    <div class="actions">
+      <button type="button" class="primary" id="askAiSaveKey">Simpan &amp; Uji</button>
+      <button type="button" id="askAiClearKey">Hapus Key</button>
+    </div>
+  </div>
   <div class="ask-ai-msgs" id="askAiMsgs"></div>
   <form class="ask-ai-form" id="askAiForm">
     <textarea id="askAiInput" rows="1" placeholder="Tanya tentang nowcast, skenario, NSI…" maxlength="4000"></textarea>
@@ -8279,8 +8334,28 @@ const ASK_AI={
   open:false,
   busy:false,
   online:false,
-  history:[]
+  history:[],
+  LS_KEY:"sinar_qwen_api_key",
+  LS_MODEL:"sinar_qwen_model",
+  LS_BASE:"sinar_qwen_base"
 };
+function askAiLoadSettings(){
+  let apiKey="", model="qwen-plus", baseUrl="https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+  try{
+    apiKey=localStorage.getItem(ASK_AI.LS_KEY)||"";
+    model=localStorage.getItem(ASK_AI.LS_MODEL)||model;
+    baseUrl=localStorage.getItem(ASK_AI.LS_BASE)||baseUrl;
+  }catch(_){}
+  return {apiKey, model, baseUrl};
+}
+function askAiSaveSettings({apiKey, model, baseUrl}){
+  try{
+    if(apiKey) localStorage.setItem(ASK_AI.LS_KEY, apiKey);
+    else localStorage.removeItem(ASK_AI.LS_KEY);
+    if(model) localStorage.setItem(ASK_AI.LS_MODEL, model);
+    if(baseUrl) localStorage.setItem(ASK_AI.LS_BASE, baseUrl);
+  }catch(_){}
+}
 function askAiBuildContext(){
   const ctx={
     page:typeof CURRENT!=="undefined"?CURRENT:null,
@@ -8328,29 +8403,72 @@ function askAiSetOpen(open){
     if(inp) setTimeout(()=>inp.focus(), 50);
   }
 }
+function askAiFillSettingsForm(){
+  const s=askAiLoadSettings();
+  if(el("askAiKey")) el("askAiKey").value=s.apiKey||"";
+  if(el("askAiModel")) el("askAiModel").value=s.model||"qwen-plus";
+  if(el("askAiBase")) el("askAiBase").value=s.baseUrl||"https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+}
 async function askAiRefreshStatus(){
   const st=el("askAiStatus");
+  const local=askAiLoadSettings();
+  let serverConfigured=false, serverModel="qwen-plus";
   try{
     const r=await fetch("/api/ask-ai/status");
     const j=await r.json();
-    ASK_AI.online=!!j.configured;
-    if(st){
-      st.classList.toggle("online", ASK_AI.online);
-      st.innerHTML=ASK_AI.online
-        ?`<span class="dot"></span>Qwen siap · model ${esc(j.model||"qwen-plus")}`
-        :`<span class="dot"></span>Mode offline — set <code>NPL_QWEN_API_KEY</code> untuk Qwen`;
+    serverConfigured=!!j.configured;
+    serverModel=j.model||serverModel;
+  }catch(_){}
+  const hasLocal=!!(local.apiKey&&local.apiKey.trim());
+  ASK_AI.online=serverConfigured||hasLocal;
+  if(st){
+    st.classList.toggle("online", ASK_AI.online);
+    if(ASK_AI.online){
+      const src=hasLocal?"(key browser)":"(key server)";
+      st.innerHTML=`<span class="dot"></span>Qwen siap · ${esc(local.model||serverModel)} ${src}`;
+    } else {
+      st.innerHTML=`<span class="dot"></span>Qwen belum terhubung — klik ⚙ lalu tempel API key DashScope`;
     }
-  }catch(_){
+  }
+}
+async function askAiTestConnection(){
+  const s=askAiLoadSettings();
+  if(!s.apiKey){
+    askAiAppend("sys", "Isi API key DashScope terlebih dahulu.");
+    return false;
+  }
+  askAiAppend("sys", "Menguji koneksi Qwen…");
+  try{
+    const r=await fetch("/api/ask-ai/test",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        message:"Katakan singkat: Qwen siap untuk SINAR.",
+        api_key:s.apiKey,
+        model:s.model,
+        base_url:s.baseUrl
+      })
+    });
+    const j=await r.json().catch(()=>({}));
+    if(j.ok){
+      ASK_AI.online=true;
+      askAiAppend("bot", "Terhubung ke Qwen.\n"+(j.reply||""));
+      askAiRefreshStatus();
+      return true;
+    }
+    askAiAppend("bot", "Gagal terhubung: "+(j.message||"periksa API key / region"));
     ASK_AI.online=false;
-    if(st){
-      st.classList.remove("online");
-      st.innerHTML=`<span class="dot"></span>API belum terjangkau`;
-    }
+    askAiRefreshStatus();
+    return false;
+  }catch(e){
+    askAiAppend("bot", "Tidak dapat menguji Qwen. Pastikan server berjalan.");
+    return false;
   }
 }
 async function askAiSend(message){
   const msg=(message||"").trim();
   if(!msg||ASK_AI.busy) return;
+  const s=askAiLoadSettings();
   ASK_AI.busy=true;
   const sendBtn=el("askAiSend"), inp=el("askAiInput");
   if(sendBtn) sendBtn.disabled=true;
@@ -8359,14 +8477,18 @@ async function askAiSend(message){
   askAiAppend("bot", "Menulis jawaban…");
   const pending=el("askAiMsgs")&&el("askAiMsgs").lastElementChild;
   try{
+    const body={
+      message:msg,
+      history:ASK_AI.history.slice(-10),
+      context:askAiBuildContext()
+    };
+    if(s.apiKey) body.api_key=s.apiKey;
+    if(s.model) body.model=s.model;
+    if(s.baseUrl) body.base_url=s.baseUrl;
     const r=await fetch("/api/ask-ai",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        message:msg,
-        history:ASK_AI.history.slice(-10),
-        context:askAiBuildContext()
-      })
+      body:JSON.stringify(body)
     });
     const j=await r.json().catch(()=>({}));
     if(!r.ok){
@@ -8377,9 +8499,17 @@ async function askAiSend(message){
       if(pending) pending.textContent=reply;
       ASK_AI.history.push({role:"user", content:msg});
       ASK_AI.history.push({role:"assistant", content:reply});
-      if(j.offline && el("askAiStatus")){
-        el("askAiStatus").classList.remove("online");
-        el("askAiStatus").innerHTML=`<span class="dot"></span>Mode offline — set NPL_QWEN_API_KEY untuk Qwen`;
+      if(j.offline){
+        ASK_AI.online=false;
+        if(el("askAiStatus")){
+          el("askAiStatus").classList.remove("online");
+          el("askAiStatus").innerHTML=`<span class="dot"></span>Qwen belum terhubung — klik ⚙ lalu tempel API key DashScope`;
+        }
+        const settings=el("askAiSettings");
+        if(settings) settings.hidden=false;
+      } else {
+        ASK_AI.online=true;
+        askAiRefreshStatus();
       }
     }
   }catch(e){
@@ -8400,6 +8530,33 @@ function initAskAI(){
     if(ASK_AI.open) askAiRefreshStatus();
   };
   if(close) close.onclick=()=>askAiSetOpen(false);
+  const gear=el("askAiGear"), settings=el("askAiSettings");
+  if(gear&&settings){
+    gear.onclick=()=>{
+      settings.hidden=!settings.hidden;
+      if(!settings.hidden) askAiFillSettingsForm();
+    };
+  }
+  if(el("askAiSaveKey")){
+    el("askAiSaveKey").onclick=async ()=>{
+      const apiKey=(el("askAiKey")&&el("askAiKey").value||"").trim();
+      const model=(el("askAiModel")&&el("askAiModel").value)||"qwen-plus";
+      const baseUrl=(el("askAiBase")&&el("askAiBase").value)||"";
+      if(!apiKey){ askAiAppend("sys","API key wajib diisi."); return; }
+      askAiSaveSettings({apiKey, model, baseUrl});
+      const ok=await askAiTestConnection();
+      if(ok && settings) settings.hidden=true;
+    };
+  }
+  if(el("askAiClearKey")){
+    el("askAiClearKey").onclick=()=>{
+      askAiSaveSettings({apiKey:"", model:"qwen-plus", baseUrl:"https://dashscope-intl.aliyuncs.com/compatible-mode/v1"});
+      askAiFillSettingsForm();
+      ASK_AI.online=false;
+      askAiRefreshStatus();
+      askAiAppend("sys","API key dihapus dari browser.");
+    };
+  }
   if(form){
     form.onsubmit=e=>{
       e.preventDefault();
@@ -8419,8 +8576,9 @@ function initAskAI(){
   if(msgs && !msgs.dataset.seeded){
     msgs.dataset.seeded="1";
     askAiAppend("bot",
-      "Halo! Saya Ask AI di SINAR. Tanya saja tentang nowcast NPL, indikator, model, skenario, atau policy insight.");
+      "Halo! Saya Ask AI di SINAR (Qwen).\n\nJika belum terhubung, klik ⚙ di pojok panel, tempel API key DashScope, lalu Simpan & Uji.");
   }
+  askAiFillSettingsForm();
   askAiRefreshStatus();
 }
 
