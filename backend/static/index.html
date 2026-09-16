@@ -2800,7 +2800,10 @@ function pickUploadedTargetId(){
     const s=nplLikeScore(id);
     if(s>bestS){ best=id; bestS=s; }
   });
-  return bestS>=10?best:null;
+  // Ambang 10 = nama jelas NPL; 5+ = kandidat lemah tetap dipakai jika hanya itu yang mirip
+  if(bestS>=10) return best;
+  if(bestS>=5 && (INPUT_STATE.uploadedIndicators||[]).length<=3) return best;
+  return null;
 }
 function resolveTargetY(cfg){
   const upId=INPUT_STATE.targetId||pickUploadedTargetId();
@@ -3147,6 +3150,25 @@ function imputeNewsFeatureCols(cols, names){
     for(let t=0;t<c.length;t++) if(!Number.isFinite(c[t])) c[t]=0;
   });
 }
+/** Setelah unggah: isi sisa NaN (YoY/lag awal) supaya obs latih tidak habis. */
+function imputeAppliedFeatureCols(cols){
+  if(!cols||!cols.length) return;
+  cols.forEach(c=>{
+    if(!c||!c.length) return;
+    // backfill lalu forward-fill
+    let next=NaN;
+    for(let t=c.length-1;t>=0;t--){
+      if(Number.isFinite(c[t])) next=c[t];
+      else if(Number.isFinite(next)) c[t]=next;
+    }
+    let last=NaN;
+    for(let t=0;t<c.length;t++){
+      if(Number.isFinite(c[t])) last=c[t];
+      else if(Number.isFinite(last)) c[t]=last;
+    }
+    for(let t=0;t<c.length;t++) if(!Number.isFinite(c[t])) c[t]=0;
+  });
+}
 function corrOf(a,b){
   const n=a.length,ma=mean(a),mb=mean(b);let num=0,da=0,db=0;
   for(let i=0;i<n;i++){const x=a[i]-ma,y=b[i]-mb;num+=x*y;da+=x*x;db+=y*y}
@@ -3217,35 +3239,61 @@ function buildDataset(cfg,asOf,overrides,presetChosen){
   const cols=panel.cols.map(c=>{const f=ffill(c);missTotal+=f.miss;return f.v});
   // Berita Google biasanya pendek → jangan biarkan NaN mematikan seluruh obs latih unggahan
   imputeNewsFeatureCols(cols, panel.names);
+  const applied=typeof hasAppliedData==="function" && hasAppliedData();
+  if(applied) imputeAppliedFeatureCols(cols);
   const tgt=resolveTargetY(cfg);
   const yRaw=Array.from(tgt.series);
+  // Target unggahan pendek: isi celah agar overlap dengan prediktor tidak hilang
+  if(applied && tgt.fromUpload){
+    let last=NaN;
+    for(let t=0;t<yRaw.length;t++){
+      if(Number.isFinite(yRaw[t])) last=yRaw[t];
+      else if(Number.isFinite(last)) yRaw[t]=last;
+    }
+    let next=NaN;
+    for(let t=yRaw.length-1;t>=0;t--){
+      if(Number.isFinite(yRaw[t])) next=yRaw[t];
+      else if(Number.isFinite(next)) yRaw[t]=next;
+    }
+  }
   const stride=cfg.freq==="quarterly"?3:1;
   const isPeriodEnd=t=>stride===1||MONTHS[t].m%3===2;
   let tLast=lastActualTargetIdx(tgt.id,asOf,yRaw,tgt.lag);
   while(tLast>0&&!isPeriodEnd(tLast))tLast--;
   const cur=idxOfDate(asOf);
   const tCur=stride===1?cur:clamp(cur+((2-MONTHS[cur].m%3)),0,N-1);
-  const tStart=13+(stride-1)*3;
+  let tStart=13+(stride-1)*3;
   const rowsAll=[];
   for(let t=0;t<N;t++)rowsAll.push(cols.map(c=>c[t]));
-  const coreIdx=panel.names.map((nm,i)=>i).filter(i=>!isNewsFeatName(panel.names[i]));
+  // Mode data: cukup cek level L0/L1 (hindari YoY mematikan unggahan pendek)
+  const coreIdx=panel.names.map((nm,i)=>i).filter(i=>{
+    if(isNewsFeatName(panel.names[i])) return false;
+    if(!applied) return true;
+    return /\|lvl\|L[01]$/.test(panel.names[i]);
+  });
   const rowXOk=t=>{
-    const idx=coreIdx.length?coreIdx:panel.names.map((_,i)=>i);
-    if(!idx.length) return rowsAll[t].every(v=>Number.isFinite(v));
+    const idx=coreIdx.length?coreIdx:panel.names.map((_,i)=>i).filter(i=>!isNewsFeatName(panel.names[i]));
+    if(!idx.length) return true;
     return idx.every(j=>Number.isFinite(rowsAll[t][j]));
   };
-  if(typeof hasAppliedData==="function" && hasAppliedData()){
-    let xLast=-1;
-    for(let t=0;t<N;t++){ if(rowXOk(t)) xLast=t; }
-    if(xLast>=0) tLast=Math.min(tLast, xLast);
+  if(applied){
+    let xLast=-1, xFirst=-1;
+    for(let t=0;t<N;t++){
+      if(rowXOk(t) && Number.isFinite(yRaw[t])){
+        if(xFirst<0) xFirst=t;
+        xLast=t;
+      }
+    }
+    if(xLast>=0) tLast=Math.min(tLast<0?xLast:tLast, xLast);
     while(tLast>0&&!isPeriodEnd(tLast))tLast--;
+    if(xFirst>=0) tStart=Math.min(tStart, Math.max(stride===1?2:5, xFirst));
   }
   const trainT=[];
   for(let t=tStart;t<=tLast;t++){
     if(!isPeriodEnd(t)) continue;
     if(!rowXOk(t)) continue;
     if(!Number.isFinite(yRaw[t])) continue;
-    if(!rowsAll[t].every(v=>Number.isFinite(v))) continue;
+    if(!applied && !rowsAll[t].every(v=>Number.isFinite(v))) continue;
     trainT.push(t);
   }
   const Xtr=trainT.map(t=>rowsAll[t]),ytr=trainT.map(t=>yRaw[t]);
@@ -4045,10 +4093,29 @@ const INPUT_STATE={
   _lastNewsModelUsed:null
 };
 function periodToIdx(period){
-  const s=String(period).trim();
-  let m=s.match(/^(\d{4})-(\d{1,2})/);
+  const s=String(period||"").trim();
+  if(!s) return -1;
+  let m=s.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?/);
   if(m){
     const y=+m[1], mo=+m[2]-1;
+    const i=(y-START_Y)*12+mo;
+    return (i>=0&&i<N)?i:-1;
+  }
+  m=s.match(/^(\d{4})[\/.](\d{1,2})/);
+  if(m){
+    const y=+m[1], mo=+m[2]-1;
+    const i=(y-START_Y)*12+mo;
+    return (i>=0&&i<N)?i:-1;
+  }
+  m=s.match(/^(\d{4})(\d{2})$/);
+  if(m){
+    const y=+m[1], mo=+m[2]-1;
+    const i=(y-START_Y)*12+mo;
+    return (i>=0&&i<N)?i:-1;
+  }
+  m=s.match(/^(\d{4})\s*[QqTt]\s*([1-4])$/);
+  if(m){
+    const y=+m[1], mo=(+m[2]-1)*3;
     const i=(y-START_Y)*12+mo;
     return (i>=0&&i<N)?i:-1;
   }
@@ -4598,14 +4665,20 @@ function applySelectedIndicators(){
     const ids=[...INPUT_STATE.selected].filter(id=>id!=="news_stress");
     // selalu timpa deret terpilih agar tidak tercampur sisa demo
     merged=ids.length?mergeObservationsIntoEngine(d.observations, ids, true):{n:0,indicators:[]};
+    if(!merged.n){
+      INPUT_STATE.dataApplied=false;
+      toast("Tidak ada observasi yang masuk kalender model (cek format periode YYYY-MM, rentang 2015–2026).");
+      el("indStatus").textContent="Gagal menerapkan: 0 nilai terpetakan ke kalender model";
+      return;
+    }
     INPUT_STATE.uploadResult=d;
     renderIndicatorWorkspace(d);
     INPUT_STATE.selected=new Set(merged.indicators);
     syncIndChecks();
     el("indStatus").textContent=`Diterapkan: ${merged.n} nilai · ${merged.indicators.length} indikator`+(wantNews?" · sentimen berita aktif":"");
-    toast(`${merged.indicators.length} indikator diterapkan`+(wantNews?" + sentimen berita":"")+". Lanjut ke Indikator.");
+    toast(`${merged.indicators.length} indikator diterapkan`+(wantNews?" + sentimen berita":"")+".");
   } else {
-    toast("Sentimen berita diterapkan. Lanjut ke Indikator.");
+    toast("Sentimen berita diterapkan.");
   }
   INPUT_STATE.dataApplied=true;
   MODEL_AUTORUN_TRIED=false;
@@ -4615,8 +4688,6 @@ function applySelectedIndicators(){
     if(wantNews && INPUT_STATE.newsArticles.length){
       INPUT_STATE._newsModelChosen=true;
       await processNewsWithSentiment({silent:true, skipPipeline:true});
-    } else if(!wantNews){
-      // berita tidak dipakai
     }
     alignCfgToUploadedData();
     if(el("indPick")) fillIndPick();
@@ -4624,12 +4695,14 @@ function applySelectedIndicators(){
     toast("Diselaraskan ke "+CFG.vars.filter(v=>v!=="news_stress").length+" indikator unggahan"
       +(wantNews?(" · "+(INPUT_STATE.mergedNews||0)+" berita · NLP "+((SENT_MODELS[CFG.sentModel]&&SENT_MODELS[CFG.sentModel].name)||CFG.sentModel)):""));
     const ok=await runPipeline({fromMethod:true});
+    refreshGatedPages();
     if(ok){
-      toast("Data diterapkan · evaluasi model siap. Tinjau deret di Indikator.");
+      toast("Data terhubung ke Model · Skenario · Policy Insight.");
+      go("models");
     } else {
-      toast("Data diterapkan. Tinjau Indikator; jalankan alur di Model bila evaluasi belum muncul.");
+      toast("Data diterapkan, tetapi evaluasi model belum siap. Buka Model lalu klik Jalankan nowcast.");
+      go("models");
     }
-    go("indicators");
   })();
 }
 function renderInputPage(){ renderInputSession(); renderDataPage(); }
@@ -5562,7 +5635,7 @@ async function runPipeline(opts){
     if(btn0){ btn0.disabled=false; btn0.textContent="Jalankan nowcast"; }
     renderAll();
     if(PIPELINE_DONE){ const cb=PIPELINE_DONE; PIPELINE_DONE=null; cb(false); }
-    return;
+    return false;
   }
   const btn=el("runBtn");
   if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Menjalankan'; }
@@ -7698,7 +7771,9 @@ function wirePolicyExport(payload){
   };
 }
 async function renderPolicyPage(force){
-  const msg="Unggah & terapkan data di Data, jalankan Model, lalu atur Skenario untuk Policy Insight.";
+  const msg=!hasAppliedData()
+    ?"Unggah & terapkan data di Data, jalankan Model, lalu atur Skenario untuk Policy Insight."
+    :"Data sudah diterapkan, tetapi evaluasi model belum siap. Buka Model lalu klik Jalankan nowcast.";
   if(!hasAppliedData()||!RES){
     ["polKpiOutlook","polKpiInsight","polKpiRec","polKpiUrgency"].forEach(id=>{ if(el(id)) el(id).textContent="—"; });
     if(el("polKpiOutlookSub")) el("polKpiOutlookSub").textContent="Status risiko nowcast";
@@ -8190,7 +8265,9 @@ function renderScenarioEmpty(msg){
   if(el("scPeriodLabel")) el("scPeriodLabel").textContent="—";
 }
 function renderScenarioControls(){
-  const msg="Unggah dan terapkan indikator di halaman Data, lalu jalankan alur model untuk simulasi skenario.";
+  const msg=!hasAppliedData()
+    ?"Unggah dan terapkan indikator di halaman Data, lalu jalankan alur model untuk simulasi skenario."
+    :"Data sudah diterapkan, tetapi evaluasi model belum siap. Buka Model lalu klik Jalankan nowcast.";
   if(!hasAppliedData()||!RES){
     renderScenarioEmpty(msg);
     return;
