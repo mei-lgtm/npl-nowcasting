@@ -1945,7 +1945,7 @@ svg .axis{stroke:var(--rule)}
             <p class="sub">Disusun dari nowcast, driver, berita, dan skenario</p>
           </div>
           <div class="pol-tools">
-            <label class="note" style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="useLLM"> Pakai LLM</label>
+            <label class="note" style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="useLLM"> Pakai LLM (Gemini)</label>
             <button class="btn ghost" type="button" id="analystBtn" style="padding:5px 10px">Susun ulang</button>
           </div>
         </div>
@@ -3886,6 +3886,13 @@ function initUI(){
   el("runBtn").onclick=()=>runPipeline();
   el("resetBtn").onclick=()=>{CFG=DEFAULT_CFG();INPUT_STATE.dataApplied=false;RES=null;initUI();go("data");renderAll()};
   el("analystBtn").onclick=()=>renderPolicyPage(true);
+  if(el("useLLM")&&!el("useLLM").dataset.ready){
+    el("useLLM").dataset.ready="1";
+    el("useLLM").onchange=()=>{
+      if(el("useLLM").checked) renderPolicyPage(true);
+      else if(el("analystOut")){ el("analystOut").hidden=true; el("analystOut").innerHTML=""; }
+    };
+  }
   el("pickSentBtn").onclick=()=>{
     const best=Object.keys(SENT_MODELS).map(k=>({k,...evalSentModel(k)})).sort((a,b)=>b.f1-a.f1)[0];
     CFG.sentModel=best.k;
@@ -7782,34 +7789,67 @@ async function renderPolicyPage(force){
   const exec=`Ringkasan Eksekutif\nOutlook ${policyRiskId(st)}; urgensi ${urg.lab}. Nowcast ${now.value.toFixed(2)}% pada ${now.period} (${pp(d)} pp vs rilis). Model ${chosen.spec.name}. Rekomendasi fokus: pantau driver ${drv[0]?drv[0].name:"makro"} dan sektor ${sectors[0]?sectors[0].label:"—"}.`;
   wirePolicyExport({report,csv,exec});
 
-  if(force&&el("useLLM")&&el("useLLM").checked){
-    const box=el("analystOut");
-    if(box){
-      box.hidden=false;
-      box.innerHTML=`<span class="spin"></span> Meminta ringkasan dari model bahasa…`;
-      const facts={
-        target:currentTargetInfo().name,periode:RES.now.period,nowcast:+RES.now.value.toFixed(2),
-        aktual_terakhir:+last.toFixed(2),interval:[+RES.now.lo.toFixed(2),+RES.now.hi.toFixed(2)],
-        model:chosen.spec.name,rmse:+chosen.bt.rmse.toFixed(3),
+  if(el("useLLM")&&el("useLLM").checked){
+    if(force){
+      await fillPolicyLlmSummary({
+        target:currentTargetInfo().name,
+        periode:RES.now.period,
+        nowcast:+RES.now.value.toFixed(2),
+        aktual_terakhir:+last.toFixed(2),
+        interval:[+RES.now.lo.toFixed(2),+RES.now.hi.toFixed(2)],
+        outlook:policyRiskId(st),
+        urgensi:urg.lab,
+        model:chosen.spec.name,
+        rmse:+chosen.bt.rmse.toFixed(3),
         driver:drv.map(i=>({fitur:i.name,kontribusi_pp:+i.v.toFixed(3)})),
         sektor:sectors.slice(0,3).map(s=>({sektor:s.label,delta:s.chg,risiko:s.risk}))
-      };
-      try{
-        const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:
-            "Anda analis risiko kredit di bank sentral. Tulis 3 paragraf ringkas Bahasa Indonesia dari data berikut. Jangan mengarang angka. Hindari klaim kausal. Data: "+JSON.stringify(facts)}]})});
-        const data=await r.json();
-        const txt=(data.content||[]).map(c=>c.text||"").join("\n").trim();
-        box.innerHTML=txt
-          ? `<div class="note" style="margin-bottom:6px">Ringkasan model bahasa</div>${txt.split("\n").filter(Boolean).map(p=>"<p style='margin:0 0 8px'>"+esc(p)+"</p>").join("")}`
-          : `<p class="note">Ringkasan LLM kosong — memakai insight kartu di atas.</p>`;
-      }catch(_){
-        box.innerHTML=`<p class="note">LLM tidak tersedia pada lingkungan ini. Insight kartu di atas tetap berlaku.</p>`;
-      }
+      });
     }
   } else if(el("analystOut")){
     el("analystOut").hidden=true;
     el("analystOut").innerHTML="";
+  }
+}
+async function fillPolicyLlmSummary(facts){
+  const box=el("analystOut");
+  if(!box) return;
+  box.hidden=false;
+  box.innerHTML=`<span class="spin"></span> Menyusun ringkasan dengan Gemini…`;
+  const s=(typeof askAiLoadSettings==="function")?askAiLoadSettings():{apiKey:"",model:"gemini-3.6-flash"};
+  const prompt=
+    "Anda analis risiko kredit di bank sentral. Tulis tepat 3 paragraf ringkas dalam Bahasa Indonesia berdasarkan data JSON berikut. "+
+    "Jangan mengarang angka di luar data. Hindari klaim kausal absolut; gunakan bahasa asosiasi/tekanan. "+
+    "Paragraf 1: outlook & angka nowcast. Paragraf 2: driver/sektor utama. Paragraf 3: implikasi pengawasan singkat. "+
+    "Pisahkan paragraf dengan baris kosong. Data: "+JSON.stringify(facts);
+  try{
+    const body={
+      message:prompt,
+      history:[],
+      context:{page:"policy", feature:"policy_llm_summary"},
+      model:s.model||"gemini-3.6-flash"
+    };
+    if(s.apiKey) body.api_key=s.apiKey;
+    const r=await fetch("/api/ask-ai",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body)
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok){
+      const err=(data&&(data.detail||data.message))||("HTTP "+r.status);
+      box.innerHTML=`<p class="note">Gagal memanggil Gemini: ${esc(typeof err==="string"?err:JSON.stringify(err))}. Insight kartu di atas tetap berlaku.</p>`;
+      return;
+    }
+    if(data.offline){
+      box.innerHTML=`<p class="note">Gemini belum terhubung. Set <code>NPL_GEMINI_API_KEY</code> di server atau tempel key di pengaturan Ask AI (⚙). Insight kartu di atas tetap berlaku.</p>`;
+      return;
+    }
+    const txt=(data.reply||"").trim();
+    box.innerHTML=txt
+      ? `<div class="note" style="margin-bottom:6px">Ringkasan Gemini${data.model?" · "+esc(data.model):""}</div>${txt.split(/\n+/).filter(Boolean).map(p=>"<p style='margin:0 0 8px'>"+esc(p)+"</p>").join("")}`
+      : `<p class="note">Ringkasan LLM kosong — memakai insight kartu di atas.</p>`;
+  }catch(_){
+    box.innerHTML=`<p class="note">Tidak dapat menghubungi Gemini. Pastikan server berjalan. Insight kartu di atas tetap berlaku.</p>`;
   }
 }
 async function renderAnalyst(force){
