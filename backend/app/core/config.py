@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     data_dir: str = "data/demo"
     openai_api_key: Optional[str] = None
     news_api_key: Optional[str] = None
-    # Qwen / DashScope (OpenAI-compatible chat completions)
+    # Google Gemini (Ask AI) — free-tier flash models
+    gemini_api_key: Optional[str] = None
+    gemini_model: str = "gemini-3.6-flash"
+    # Legacy Qwen fields (ignored by Ask AI, kept for old .env compatibility)
     qwen_api_key: Optional[str] = None
     qwen_model: str = "qwen-plus"
     qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"

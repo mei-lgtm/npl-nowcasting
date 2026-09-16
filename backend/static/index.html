@@ -73,17 +73,13 @@ a{color:var(--actual)}
   border-radius:10px; padding:1px 7px; font-variant-numeric:tabular-nums; min-width:20px; text-align:center;
 }
 .railfoot{
-  margin-top:auto; padding:16px 16px 18px;
-  background:linear-gradient(180deg,transparent,rgba(0,0,0,.25)),
-    url('https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=480&q=60') center/cover;
-  min-height:120px; position:relative;
+  margin-top:auto; padding:16px 16px 72px;
+  background:var(--nav, #0C1F3A);
+  min-height:72px; position:relative;
 }
-.railfoot::before{content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(12,31,58,.2),rgba(12,31,58,.92))}
-.railfoot blockquote{
-  position:relative; margin:0; font-size:11px; line-height:1.45; color:rgba(255,255,255,.85);
-  font-style:italic; padding-top:40px;
-}
-.rail-quote{font-size:10px; color:rgba(255,255,255,.55); position:relative; margin-top:6px}
+.railfoot::before{content:none; display:none}
+.railfoot blockquote{display:none}
+.rail-quote{display:none}
 
 .topbar{
   background:var(--panel); border-bottom:1px solid var(--rule-2);
@@ -1123,6 +1119,8 @@ svg .axis{stroke:var(--rule)}
 }
 .pol-ex-item .ttl{font-size:13px;font-weight:600;color:var(--ink)}
 .pol-ex-item .meta{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.pol-ex-btns{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.pol-ex-btns .btn{padding:5px 10px;font-size:11.5px}
 .pol-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 @media(max-width:1100px){
   .pol-hero{grid-template-columns:1fr}
@@ -1133,7 +1131,7 @@ svg .axis{stroke:var(--rule)}
   .pol-kpis{grid-template-columns:1fr}
 }
 
-/* ===== Ask AI (Qwen) — pojok kiri bawah ===== */
+/* ===== Ask AI (Gemini) — pojok kiri bawah ===== */
 .ask-ai-fab{
   position:fixed; left:18px; bottom:18px; z-index:70;
   display:inline-flex; align-items:center; gap:8px;
@@ -1241,9 +1239,9 @@ svg .axis{stroke:var(--rule)}
     </div>
   </div>
   <div class="nav" id="nav"></div>
-  <div class="railfoot">
-    <blockquote>Stable Financial System for a Stronger Indonesia</blockquote>
-    <div class="rail-quote">Vintage: <span id="railAsOf">—</span> · <span id="railDataMode">data sintetis demo</span></div>
+  <div class="railfoot" aria-hidden="true">
+    <span id="railAsOf" hidden>—</span>
+    <span id="railDataMode" hidden>data sintetis demo</span>
   </div>
 </nav>
 
@@ -2199,7 +2197,7 @@ svg .axis{stroke:var(--rule)}
 </div><!-- /.main-wrap -->
 </div><!-- /.shell -->
 
-<!-- Ask AI · Qwen -->
+<!-- Ask AI · Gemini -->
 <button type="button" class="ask-ai-fab" id="askAiFab" aria-expanded="false" aria-controls="askAiPanel" title="Ask AI">
   <span class="ask-ai-fab-ic" aria-hidden="true">
     <svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
@@ -2210,41 +2208,32 @@ svg .axis{stroke:var(--rule)}
   <div class="ask-ai-head">
     <div>
       <div class="ttl">Ask AI</div>
-      <div class="sub">Dibantu Qwen · konteks SINAR</div>
+      <div class="sub">Dibantu Gemini · konteks SINAR</div>
     </div>
     <div class="ask-ai-head-actions">
-      <button type="button" class="ask-ai-gear" id="askAiGear" title="Pengaturan Qwen" aria-label="Pengaturan">⚙</button>
+      <button type="button" class="ask-ai-gear" id="askAiGear" title="Pengaturan Gemini" aria-label="Pengaturan">⚙</button>
       <button type="button" class="ask-ai-close" id="askAiClose" aria-label="Tutup">×</button>
     </div>
   </div>
-  <div class="ask-ai-status" id="askAiStatus"><span class="dot"></span>Memeriksa koneksi Qwen…</div>
+  <div class="ask-ai-status" id="askAiStatus"><span class="dot"></span>Memeriksa koneksi Gemini…</div>
   <div class="ask-ai-settings" id="askAiSettings" hidden>
     <div>
-      <label for="askAiKey">DashScope / Qwen API Key</label>
-      <input type="password" id="askAiKey" placeholder="sk-..." autocomplete="off">
+      <label for="askAiKey">Google AI Studio / Gemini API Key</label>
+      <input type="password" id="askAiKey" placeholder="AIza… atau AQ.…" autocomplete="off">
     </div>
-    <div class="row">
-      <div>
-        <label for="askAiModel">Model</label>
-        <select id="askAiModel">
-          <option value="qwen-plus">qwen-plus</option>
-          <option value="qwen-turbo">qwen-turbo</option>
-          <option value="qwen-max">qwen-max</option>
-          <option value="qwen2.5-72b-instruct">qwen2.5-72b-instruct</option>
-        </select>
-      </div>
-      <div>
-        <label for="askAiBase">Region</label>
-        <select id="askAiBase">
-          <option value="https://dashscope-intl.aliyuncs.com/compatible-mode/v1">International</option>
-          <option value="https://dashscope.aliyuncs.com/compatible-mode/v1">China</option>
-        </select>
-      </div>
+    <div>
+      <label for="askAiModel">Model (gratis)</label>
+      <select id="askAiModel">
+        <option value="gemini-3.6-flash">gemini-3.6-flash (disarankan · gratis)</option>
+        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+        <option value="gemini-flash-latest">gemini-flash-latest</option>
+        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+      </select>
     </div>
-    <p class="hint">Dapatkan key di dashscope.console.aliyun.com · disimpan lokal di browser Anda (tidak di-commit ke Git).</p>
+    <p class="hint">Key dari aistudio.google.com/apikey · model gratis flash. Key server di <code>NPL_GEMINI_API_KEY</code> dipakai otomatis jika sudah diset.</p>
     <div class="actions">
       <button type="button" class="primary" id="askAiSaveKey">Simpan &amp; Uji</button>
-      <button type="button" id="askAiClearKey">Hapus Key</button>
+      <button type="button" id="askAiClearKey">Hapus Key Browser</button>
     </div>
   </div>
   <div class="ask-ai-msgs" id="askAiMsgs"></div>
@@ -7507,42 +7496,197 @@ function fillPolicyChart(view){
       (showCustom?`<span><i style="border-color:#475569"></i>Custom</span>`:"");
   }
 }
-function downloadText(filename, text, mime){
-  const blob=new Blob([text],{type:mime||"text/plain;charset=utf-8"});
+function downloadBlob(filename, blob){
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
   a.download=filename;
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),1500);
 }
+function downloadText(filename, text, mime){
+  downloadBlob(filename, new Blob([text],{type:mime||"text/plain;charset=utf-8"}));
+}
+function pdfEscape(s){
+  return String(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)");
+}
+function wrapPlainLines(text, maxChars){
+  const out=[];
+  String(text||"").replace(/\r\n/g,"\n").split("\n").forEach(para=>{
+    const words=para.split(/\s+/).filter(Boolean);
+    if(!words.length){ out.push(""); return; }
+    let line="";
+    words.forEach(w=>{
+      const next=line?line+" "+w:w;
+      if(next.length>maxChars && line){ out.push(line); line=w; }
+      else line=next;
+    });
+    if(line) out.push(line);
+  });
+  return out;
+}
+function buildSimplePdf(title, body){
+  const lines=[String(title||"Dokumen"), ""].concat(wrapPlainLines(body, 92));
+  const content=["BT", "/F1 11 Tf", "50 800 Td", "14 TL"];
+  lines.slice(0,52).forEach((ln,i)=>{
+    if(i===0) content.push("/F1 14 Tf", `(${pdfEscape(ln)}) Tj`, "T*", "/F1 10 Tf");
+    else content.push(`(${pdfEscape(ln)}) Tj`, "T*");
+  });
+  content.push("ET");
+  const stream=content.join("\n");
+  const objs=[];
+  const add=(s)=>{ objs.push(s); return objs.length; };
+  add("<< /Type /Catalog /Pages 2 0 R >>");
+  add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>");
+  add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  let pdf="%PDF-1.4\n";
+  const offsets=[0];
+  objs.forEach((bodyObj,i)=>{
+    offsets.push(pdf.length);
+    pdf+=`${i+1} 0 obj\n${bodyObj}\nendobj\n`;
+  });
+  const xref=pdf.length;
+  pdf+=`xref\n0 ${objs.length+1}\n`;
+  pdf+="0000000000 65535 f \n";
+  for(let i=1;i<=objs.length;i++){
+    pdf+=String(offsets[i]).padStart(10,"0")+" 00000 n \n";
+  }
+  pdf+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf],{type:"application/pdf"});
+}
+function buildWordDoc(title, body){
+  const paras=String(body||"").replace(/\r\n/g,"\n").split("\n")
+    .map(p=>`<p style="margin:0 0 8px;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4">${esc(p)||"&nbsp;"}</p>`)
+    .join("");
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+<head><meta charset="utf-8"><title>${esc(title||"Dokumen")}</title></head>
+<body>
+<h1 style="font-family:Calibri,Arial,sans-serif;font-size:16pt;color:#0C1F3A">${esc(title||"Dokumen")}</h1>
+${paras}
+<p style="margin-top:18px;font-size:9pt;color:#64748B">SINAR — Sistem Nowcasting dan Analisis Risiko NPL Konsumsi</p>
+</body></html>`;
+  return new Blob(["\ufeff", html],{type:"application/msword;charset=utf-8"});
+}
+function parseCsv(text){
+  return String(text||"").replace(/\r\n/g,"\n").trim().split("\n").filter(Boolean).map(line=>{
+    const cells=[]; let cur="", q=false;
+    for(let i=0;i<line.length;i++){
+      const c=line[i];
+      if(c==='"'){ if(q&&line[i+1]==='"'){ cur+='"'; i++; } else q=!q; }
+      else if(c==="," && !q){ cells.push(cur); cur=""; }
+      else cur+=c;
+    }
+    cells.push(cur);
+    return cells;
+  });
+}
+function buildExcelXml(csvText){
+  const rows=parseCsv(csvText);
+  const xmlRows=rows.map((r,ri)=>{
+    const cells=r.map(v=>{
+      const num=/^-?\d+(\.\d+)?$/.test(String(v).trim());
+      const t=num?"Number":"String";
+      const val=num?String(v).trim():esc(v);
+      return `<Cell><Data ss:Type="${t}">${val}</Data></Cell>`;
+    }).join("");
+    const style=ri===0?' ss:StyleID="hdr"':"";
+    return `<Row${style}>${cells}</Row>`;
+  }).join("\n");
+  const xml=`<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="hdr"><Font ss:Bold="1"/><Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/></Style>
+ </Styles>
+ <Worksheet ss:Name="Data">
+  <Table>${xmlRows}</Table>
+ </Worksheet>
+</Workbook>`;
+  return new Blob([xml],{type:"application/vnd.ms-excel"});
+}
+function buildTableJpg(csvText, title){
+  const rows=parseCsv(csvText);
+  if(!rows.length) rows.push(["(kosong)"]);
+  const pad=14, rowH=28, colCount=Math.max(...rows.map(r=>r.length));
+  const cols=Array.from({length:colCount},(_,i)=>{
+    const w=Math.max(80, ...rows.map(r=>String(r[i]??"").length*7+24));
+    return Math.min(w, 220);
+  });
+  const width=Math.min(1400, pad*2+cols.reduce((a,b)=>a+b,0));
+  const height=pad*2+40+rows.length*rowH;
+  const canvas=document.createElement("canvas");
+  canvas.width=width; canvas.height=height;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,width,height);
+  ctx.fillStyle="#0C1F3A"; ctx.font="bold 16px Inter,Arial,sans-serif";
+  ctx.fillText(title||"Tabel Data Pendukung", pad, 26);
+  let y=pad+40;
+  rows.forEach((r,ri)=>{
+    let x=pad;
+    cols.forEach((cw,ci)=>{
+      ctx.fillStyle=ri===0?"#DBEAFE":(ri%2? "#F8FAFC":"#FFFFFF");
+      ctx.fillRect(x, y, cw, rowH);
+      ctx.strokeStyle="#CBD5E1"; ctx.strokeRect(x, y, cw, rowH);
+      ctx.fillStyle="#0F172A";
+      ctx.font=(ri===0?"bold ":"")+"12px Inter,Arial,sans-serif";
+      const t=String(r[ci]??"");
+      ctx.fillText(t.length>28?t.slice(0,27)+"…":t, x+8, y+18);
+      x+=cw;
+    });
+    y+=rowH;
+  });
+  return new Promise(resolve=>{
+    canvas.toBlob(b=>resolve(b||null), "image/jpeg", 0.92);
+  });
+}
 function wirePolicyExport(payload){
   const host=el("polExport");
   if(!host) return;
   host.innerHTML=`
     <div class="pol-ex-item">
-      <div><div class="ttl">Laporan Policy Insight</div><div class="meta">Ringkasan teks · .txt</div></div>
-      <button class="btn ghost" type="button" data-ex="report" style="padding:6px 12px">Download TXT</button>
+      <div><div class="ttl">Laporan Policy Insight</div><div class="meta">Ringkasan teks · PDF</div></div>
+      <div class="pol-ex-btns">
+        <button class="btn ghost" type="button" data-ex="report-pdf">PDF</button>
+      </div>
     </div>
     <div class="pol-ex-item">
-      <div><div class="ttl">Tabel Data Pendukung</div><div class="meta">Driver &amp; sektor · .csv</div></div>
-      <button class="btn ghost" type="button" data-ex="csv" style="padding:6px 12px">Download CSV</button>
+      <div><div class="ttl">Tabel Data Pendukung</div><div class="meta">Driver &amp; sektor · Excel</div></div>
+      <div class="pol-ex-btns">
+        <button class="btn ghost" type="button" data-ex="table-xls">Excel</button>
+      </div>
     </div>
     <div class="pol-ex-item">
-      <div><div class="ttl">Ringkasan Eksekutif</div><div class="meta">Satu halaman · .txt</div></div>
-      <button class="btn ghost" type="button" data-ex="exec" style="padding:6px 12px">Download TXT</button>
+      <div><div class="ttl">Ringkasan Eksekutif</div><div class="meta">Satu halaman · PDF / Word</div></div>
+      <div class="pol-ex-btns">
+        <button class="btn ghost" type="button" data-ex="exec-pdf">PDF</button>
+        <button class="btn ghost" type="button" data-ex="exec-doc">Word</button>
+      </div>
     </div>`;
-  host.onclick=e=>{
+  host.onclick=async e=>{
     const btn=e.target.closest("[data-ex]");
     if(!btn||!payload) return;
-    if(btn.dataset.ex==="report"){
-      downloadText("policy-insight.txt", payload.report);
-      toast("Laporan Policy Insight diunduh");
-    } else if(btn.dataset.ex==="csv"){
-      downloadText("policy-data.csv", payload.csv, "text/csv;charset=utf-8");
-      toast("Tabel pendukung diunduh");
-    } else if(btn.dataset.ex==="exec"){
-      downloadText("ringkasan-eksekutif.txt", payload.exec);
-      toast("Ringkasan eksekutif diunduh");
+    const kind=btn.dataset.ex;
+    try{
+      if(kind==="report-pdf"){
+        downloadBlob("policy-insight.pdf", buildSimplePdf("Laporan Policy Insight", payload.report));
+        toast("Laporan PDF diunduh");
+      } else if(kind==="table-xls"){
+        downloadBlob("policy-data.xls", buildExcelXml(payload.csv));
+        toast("Tabel Excel diunduh");
+      } else if(kind==="exec-pdf"){
+        downloadBlob("ringkasan-eksekutif.pdf", buildSimplePdf("Ringkasan Eksekutif", payload.exec));
+        toast("Ringkasan PDF diunduh");
+      } else if(kind==="exec-doc"){
+        downloadBlob("ringkasan-eksekutif.doc", buildWordDoc("Ringkasan Eksekutif", payload.exec));
+        toast("Ringkasan Word diunduh");
+      }
+    }catch(err){
+      console.error(err);
+      toast("Gagal mengekspor dokumen");
     }
   };
 }
@@ -8328,32 +8472,29 @@ function renderAlerts(){
 }
 
 /* ============================================================
-   ASK AI · QWEN
+   ASK AI · GEMINI
    ============================================================ */
 const ASK_AI={
   open:false,
   busy:false,
   online:false,
   history:[],
-  LS_KEY:"sinar_qwen_api_key",
-  LS_MODEL:"sinar_qwen_model",
-  LS_BASE:"sinar_qwen_base"
+  LS_KEY:"sinar_gemini_api_key",
+  LS_MODEL:"sinar_gemini_model"
 };
 function askAiLoadSettings(){
-  let apiKey="", model="qwen-plus", baseUrl="https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+  let apiKey="", model="gemini-3.6-flash";
   try{
     apiKey=localStorage.getItem(ASK_AI.LS_KEY)||"";
     model=localStorage.getItem(ASK_AI.LS_MODEL)||model;
-    baseUrl=localStorage.getItem(ASK_AI.LS_BASE)||baseUrl;
   }catch(_){}
-  return {apiKey, model, baseUrl};
+  return {apiKey, model};
 }
-function askAiSaveSettings({apiKey, model, baseUrl}){
+function askAiSaveSettings({apiKey, model}){
   try{
     if(apiKey) localStorage.setItem(ASK_AI.LS_KEY, apiKey);
     else localStorage.removeItem(ASK_AI.LS_KEY);
     if(model) localStorage.setItem(ASK_AI.LS_MODEL, model);
-    if(baseUrl) localStorage.setItem(ASK_AI.LS_BASE, baseUrl);
   }catch(_){}
 }
 function askAiBuildContext(){
@@ -8406,13 +8547,12 @@ function askAiSetOpen(open){
 function askAiFillSettingsForm(){
   const s=askAiLoadSettings();
   if(el("askAiKey")) el("askAiKey").value=s.apiKey||"";
-  if(el("askAiModel")) el("askAiModel").value=s.model||"qwen-plus";
-  if(el("askAiBase")) el("askAiBase").value=s.baseUrl||"https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+  if(el("askAiModel")) el("askAiModel").value=s.model||"gemini-3.6-flash";
 }
 async function askAiRefreshStatus(){
   const st=el("askAiStatus");
   const local=askAiLoadSettings();
-  let serverConfigured=false, serverModel="qwen-plus";
+  let serverConfigured=false, serverModel="gemini-3.6-flash";
   try{
     const r=await fetch("/api/ask-ai/status");
     const j=await r.json();
@@ -8425,43 +8565,39 @@ async function askAiRefreshStatus(){
     st.classList.toggle("online", ASK_AI.online);
     if(ASK_AI.online){
       const src=hasLocal?"(key browser)":"(key server)";
-      st.innerHTML=`<span class="dot"></span>Qwen siap · ${esc(local.model||serverModel)} ${src}`;
+      st.innerHTML=`<span class="dot"></span>Gemini siap · ${esc(local.model||serverModel)} ${src}`;
     } else {
-      st.innerHTML=`<span class="dot"></span>Qwen belum terhubung — klik ⚙ lalu tempel API key DashScope`;
+      st.innerHTML=`<span class="dot"></span>Gemini belum terhubung — set NPL_GEMINI_API_KEY atau klik ⚙`;
     }
   }
 }
 async function askAiTestConnection(){
   const s=askAiLoadSettings();
-  if(!s.apiKey){
-    askAiAppend("sys", "Isi API key DashScope terlebih dahulu.");
-    return false;
-  }
-  askAiAppend("sys", "Menguji koneksi Qwen…");
+  askAiAppend("sys", "Menguji koneksi Gemini…");
   try{
+    const body={
+      message:"Katakan singkat: Gemini siap untuk SINAR.",
+      model:s.model||"gemini-3.6-flash"
+    };
+    if(s.apiKey) body.api_key=s.apiKey;
     const r=await fetch("/api/ask-ai/test",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        message:"Katakan singkat: Qwen siap untuk SINAR.",
-        api_key:s.apiKey,
-        model:s.model,
-        base_url:s.baseUrl
-      })
+      body:JSON.stringify(body)
     });
     const j=await r.json().catch(()=>({}));
     if(j.ok){
       ASK_AI.online=true;
-      askAiAppend("bot", "Terhubung ke Qwen.\n"+(j.reply||""));
+      askAiAppend("bot", "Terhubung ke Gemini ("+(j.model||"")+")\n"+(j.reply||""));
       askAiRefreshStatus();
       return true;
     }
-    askAiAppend("bot", "Gagal terhubung: "+(j.message||"periksa API key / region"));
+    askAiAppend("bot", "Gagal terhubung: "+(j.message||"periksa API key / kuota gratis"));
     ASK_AI.online=false;
     askAiRefreshStatus();
     return false;
   }catch(e){
-    askAiAppend("bot", "Tidak dapat menguji Qwen. Pastikan server berjalan.");
+    askAiAppend("bot", "Tidak dapat menguji Gemini. Pastikan server berjalan.");
     return false;
   }
 }
@@ -8484,7 +8620,6 @@ async function askAiSend(message){
     };
     if(s.apiKey) body.api_key=s.apiKey;
     if(s.model) body.model=s.model;
-    if(s.baseUrl) body.base_url=s.baseUrl;
     const r=await fetch("/api/ask-ai",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
@@ -8503,7 +8638,7 @@ async function askAiSend(message){
         ASK_AI.online=false;
         if(el("askAiStatus")){
           el("askAiStatus").classList.remove("online");
-          el("askAiStatus").innerHTML=`<span class="dot"></span>Qwen belum terhubung — klik ⚙ lalu tempel API key DashScope`;
+          el("askAiStatus").innerHTML=`<span class="dot"></span>Gemini belum terhubung — set NPL_GEMINI_API_KEY atau klik ⚙`;
         }
         const settings=el("askAiSettings");
         if(settings) settings.hidden=false;
@@ -8540,21 +8675,19 @@ function initAskAI(){
   if(el("askAiSaveKey")){
     el("askAiSaveKey").onclick=async ()=>{
       const apiKey=(el("askAiKey")&&el("askAiKey").value||"").trim();
-      const model=(el("askAiModel")&&el("askAiModel").value)||"qwen-plus";
-      const baseUrl=(el("askAiBase")&&el("askAiBase").value)||"";
-      if(!apiKey){ askAiAppend("sys","API key wajib diisi."); return; }
-      askAiSaveSettings({apiKey, model, baseUrl});
+      const model=(el("askAiModel")&&el("askAiModel").value)||"gemini-3.6-flash";
+      askAiSaveSettings({apiKey, model});
       const ok=await askAiTestConnection();
       if(ok && settings) settings.hidden=true;
     };
   }
   if(el("askAiClearKey")){
     el("askAiClearKey").onclick=()=>{
-      askAiSaveSettings({apiKey:"", model:"qwen-plus", baseUrl:"https://dashscope-intl.aliyuncs.com/compatible-mode/v1"});
+      askAiSaveSettings({apiKey:"", model:"gemini-3.6-flash"});
       askAiFillSettingsForm();
       ASK_AI.online=false;
       askAiRefreshStatus();
-      askAiAppend("sys","API key dihapus dari browser.");
+      askAiAppend("sys","API key browser dihapus. Server key (jika ada) tetap dipakai.");
     };
   }
   if(form){
@@ -8576,7 +8709,7 @@ function initAskAI(){
   if(msgs && !msgs.dataset.seeded){
     msgs.dataset.seeded="1";
     askAiAppend("bot",
-      "Halo! Saya Ask AI di SINAR (Qwen).\n\nJika belum terhubung, klik ⚙ di pojok panel, tempel API key DashScope, lalu Simpan & Uji.");
+      "Halo! Saya Ask AI di SINAR (Gemini).\nTanya saja tentang nowcast NPL, indikator, model, skenario, atau policy insight.");
   }
   askAiFillSettingsForm();
   askAiRefreshStatus();
